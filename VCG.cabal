@@ -1,0 +1,28 @@
+name: VCG
+version: 0.0.1
+cabal-version: >=1.2
+build-type: Simple
+license: AllRightsReserved
+license-file: ""
+description:  
+data-files: /home/vitor/Coq/VCG/data/symbols_europe.txt
+            /home/vitor/Coq/VCG/data/symbols_example.txt
+            /home/vitor/Coq/VCG/data/symbols_russia.txt
+data-dir: ""
+ 
+executable VCG
+    build-depends: QuickCheck -any, base -any, diff3 -any, mtl -any,
+                   parsec -any
+    main-is: Main.hs
+    buildable: True
+    extensions: FlexibleContexts
+    hs-source-dirs: src
+ 
+test-suite test-VCG
+    build-depends: QuickCheck -any, base -any, diff3 -any, mtl -any,
+                   parsec -any
+    type: exitcode-stdio-1.0
+    main-is: Main.hs
+    buildable: True
+    cpp-options: -DMAIN_FUNCTION=testMain
+    hs-source-dirs: src
