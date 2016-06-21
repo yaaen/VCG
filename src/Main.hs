@@ -24,6 +24,7 @@ import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
 import Data.Algorithm.Diff3
 import Operations
+import Generator
 
 -- Simple function to create a hello message.
 hello s = "Hello " ++ s
@@ -42,9 +43,8 @@ exeMain =
     putStrLn ("old symbols: " ++ show old_symbols)
     new_symbols <- readRPMSymbols new
     putStrLn ("new symbols: " ++ show new_symbols)
-    let h  = diff3 old_symbols old_symbols new_symbols
-        h' = filter (\hunk -> case hunk of { RightChange _ -> True; _ -> False } ) h
-    mapM (putStrLn . show) h'
+    hunks <- deltaRPMSymbols old_symbols new_symbols
+    mapM (putStrLn . show) hunks
     return ()
 
 -- Entry point for unit tests.

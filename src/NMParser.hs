@@ -1,5 +1,18 @@
 {-# LANGUAGE FlexibleContexts #-}
-module NMParser where
+-----------------------------------------------------------------------------
+--
+-- Module      :  Operations
+-- Copyright   :
+-- License     :  AllRightsReserved
+--
+-- Maintainer  :
+-- Stability   :
+-- Portability :
+--
+-- |
+--
+-----------------------------------------------------------------------------
+module NMParser (parse, nmParser) where
 
 import qualified Text.Parsec as Parsec
 import Text.Parsec ((<?>))
