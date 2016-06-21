@@ -35,6 +35,10 @@ rule2 = do
         sym_name <- symbol_name
         return (sym_value, sym_type, sym_name)
 
-nmParser = Parsec.many1 $ do {Parsec.try (rule2 <|> rule1) >>= \line -> Parsec.char '\n' >> return line}
+nmParser = Parsec.many1 $
+           do
+           {Parsec.try (rule2 <|> rule1)
+            >>= \line -> Parsec.char '\n'
+            >> return line}
 
 test2 = parse nmParser "08048610 T __x86.get_pc_thunk.bx"
