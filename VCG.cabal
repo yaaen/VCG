@@ -5,22 +5,21 @@ build-type: Simple
 license: AllRightsReserved
 license-file: ""
 description:  
-data-files: /home/vitor/Coq/VCG/data/symbols_europe.txt
-            /home/vitor/Coq/VCG/data/symbols_example.txt
-            /home/vitor/Coq/VCG/data/symbols_russia.txt
 data-dir: ""
  
 executable VCG
-    build-depends: QuickCheck -any, base -any, diff3 -any, mtl -any,
-                   parsec -any
+    build-depends: MissingH -any, QuickCheck -any, aeson -any,
+                   base -any, diff3 -any, mtl -any, parsec -any, path -any,
+                   process -any, pyfi -any
     main-is: Main.hs
     buildable: True
     extensions: FlexibleContexts
     hs-source-dirs: src
  
 test-suite test-VCG
-    build-depends: QuickCheck -any, base -any, diff3 -any, mtl -any,
-                   parsec -any
+    build-depends: MissingH -any, QuickCheck -any, aeson -any,
+                   base -any, diff3 -any, mtl -any, parsec -any, path -any,
+                   process -any, pyfi -any
     type: exitcode-stdio-1.0
     main-is: Main.hs
     buildable: True
