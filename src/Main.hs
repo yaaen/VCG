@@ -33,17 +33,22 @@ hello s = "Hello " ++ s
 -- hello s you will be left with s (for any s).
 prop_hello s = stripPrefix "Hello " (hello s) == Just s
 
--- Hello World
-exeMain =
+exeMainDebug =
     do
-    (old, new) <- readDeltaRPM "./data/ecall-delta-1.0-1.drpm"
+    (old, new) <- readDeltaRPM
     putStrLn ("old RPM: " ++ old)
     putStrLn ("new RPM: " ++ new)
-    old_symbols <- readRPMSymbols old
+    applyDeltaRPM (old, new)
+    (old_symbols, new_symbols) <- readRPMSymbols (old, new)
     putStrLn ("old symbols: " ++ show old_symbols)
-    new_symbols <- readRPMSymbols new
     putStrLn ("new symbols: " ++ show new_symbols)
-    hunks <- deltaRPMSymbols old_symbols new_symbols
+    hunks <- deltaRPMSymbols (old_symbols, new_symbols)
+    mapM (putStrLn . show) hunks
+    return ()
+
+exeMain =
+    do
+    hunks <- readDeltaRPM >>= applyDeltaRPM >>= readRPMSymbols >>= deltaRPMSymbols
     mapM (putStrLn . show) hunks
     return ()
 
