@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Generator
@@ -20,20 +21,26 @@ import Control.Monad.State
 import Control.Monad.Writer
 import Data.Map
 import Code
+import Functions
 
-infix  4 :<:, :<=:, :>:, :>=:, :=:, :/=:, :>>:
-infixl 3 :/\:
+#ifndef DELTA_RPM
+#define DELTARPM "ecall-delta-1.0-1.drpm"
+#endif
+
+infix  4 :<:, :<=:, :>:, :>=:, :=:, :/=:
+infixl 3 :/\:, :>>:
 infixl 2 :\/:
 infixr 1 :=>:
 infix  0 :<=>:
 
+type Term = String
 data Formula  = Formula :/\: Formula
               | Formula :\/: Formula
               | Formula :=>: Formula
               | Formula :<=>: Formula
               | Not Formula
-              | Exists Term  Formula
-              | Forall Term  Formula
+              | Exists String Formula
+              | Forall String Formula
               | TRUE
               | FALSE
               | Term :<:   Term
@@ -43,25 +50,33 @@ data Formula  = Formula :/\: Formula
               | Term :=:   Term
               | Term :/=:  Term
 
-data Term  = Term (Map String Formula)
-
-logical_var    :: String -> Term
-logical_var x  = Term (singleton x TRUE)
-
-type Env = Map String Value
+type Pre  = Map Term Formula
+type Env = Map Term Value
 
 data VCGExpr = ReadDeltaRPM
              | ApplyDeltaRPM
              | ReadRPMSymbols
              | DeltaRPMSymbols
-             | Value :>>: Value
+             | VCGExpr :>>: VCGExpr
 
-type Evaluator a = WriterT [Formula] (StateT Env IO) a
+type VCG a = WriterT [Formula] (StateT Env IO) a
+runVCG :: Env -> [Formula] -> VCG a -> IO ((a, [Formula]), Env)
+runVCG env vcs g = runStateT (runWriterT g) env
 
-pvcg
-    :: VCGExpr ->
-       Formula ->
-       Evaluator VCGExpr
+pvcg :: VCGExpr -> Formula -> VCG ()
 pvcg ReadDeltaRPM q
-    = return ReadDeltaRPM
+    = do { Tuple (RPM a, RPM b) <- liftIO readDeltaRPM_ ; return () }
+pvcg ApplyDeltaRPM q
+    = liftIO $ applyDeltaRPM_  (Tuple (RPM "", RPM "")) >> return ()
+pvcg ReadRPMSymbols q
+    = do { Tuple (a, b) <- liftIO $ readRPMSymbols_ (Tuple (RPM "", RPM "")); return () }
+pvcg DeltaRPMSymbols q
+    = do
+      Tuple (RPM a, RPM b) <- liftIO $ deltaRPMSymbols_ (Tuple (ListSymbols [], ListSymbols []))
+      return ()
+
+example = let var = "x" :: Term
+              prog = ReadDeltaRPM :>>: ApplyDeltaRPM :>>: ReadRPMSymbols :>>: DeltaRPMSymbols
+              q = Forall var TRUE
+          in runVCG (singleton var (RPM DELTARPM)) [] (pvcg prog q)
 
