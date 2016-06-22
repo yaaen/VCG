@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, TemplateHaskell #-}
+{-# LANGUAGE CPP, TemplateHaskell, ScopedTypeVariables #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Operations
@@ -13,18 +13,20 @@
 --
 -----------------------------------------------------------------------------
 
-module Operations (readDeltaRPM, applyDeltaRPM, readRPMSymbols, deltaRPMSymbols) where
+module Operations (readDeltaRPM, applyDeltaRPM, readRPMSymbols, deltaRPMSymbols, exeMain) where
 
 import Text.Parsec.String
 import Python
 import System.Process
 import System.Exit
 import Control.Exception
+import Control.Monad
 import Control.Applicative
 import Path
 import Data.String.Utils
 import Data.Algorithm.Diff3
 import NMParser
+import Code
 
 #ifndef DELTA_RPM
 #define DELTARPM "ecall-delta-1.0-1.drpm"
@@ -76,7 +78,6 @@ readSymTab rpm
       where
       fillout s = case s of { "" -> replicate 8 ' ' ; _ -> s }
 
-
 deltaRPMSymbols
     :: ([(String,String)], [(String,String)]) ->
        IO [Hunk (String, String)]
@@ -85,3 +86,8 @@ deltaRPMSymbols (old, new)
         $ filter (\hunk -> case hunk of { RightChange _ -> True; _ -> False } )
           $ diff3 old old new
 
+exeMain =
+    do
+    hunks <- readDeltaRPM >>= applyDeltaRPM >>= readRPMSymbols >>= deltaRPMSymbols
+    mapM (putStrLn . show) hunks
+    return ()

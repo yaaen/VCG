@@ -18,39 +18,22 @@ module Generator (
 
 import Control.Monad.State
 import Control.Monad.Writer
-import Data.IntMap
-import qualified Data.Map as M
+import Data.Map
 import Code
 
--- old rpm    : 1
--- new rpm    : 2
--- old symtab : 3
--- new symtab : 4
--- delta diff : 5
-type Name  = Int
-
-data Term  = Term (IntMap Integer) Integer
-
-var        :: Name -> Term
-var x      = Term (singleton x 1) 0
-
-num        :: Integer -> Term
-num n      = Term empty n
-
+infix  4 :<:, :<=:, :>:, :>=:, :=:, :/=:, :>>:
 infixl 3 :/\:
 infixl 2 :\/:
 infixr 1 :=>:
 infix  0 :<=>:
-
-infix 4 :<:, :<=:, :>:, :>=:, :=:, :/=:, :>>:
 
 data Formula  = Formula :/\: Formula
               | Formula :\/: Formula
               | Formula :=>: Formula
               | Formula :<=>: Formula
               | Not Formula
-              | Exists (Term -> Formula)
-              | Forall (Term -> Formula)
+              | Exists Term  Formula
+              | Forall Term  Formula
               | TRUE
               | FALSE
               | Term :<:   Term
@@ -60,7 +43,12 @@ data Formula  = Formula :/\: Formula
               | Term :=:   Term
               | Term :/=:  Term
 
-type Env = M.Map String Value
+data Term  = Term (Map String Formula)
+
+logical_var    :: String -> Term
+logical_var x  = Term (singleton x TRUE)
+
+type Env = Map String Value
 
 data VCGExpr = ReadDeltaRPM
              | ApplyDeltaRPM
@@ -70,6 +58,10 @@ data VCGExpr = ReadDeltaRPM
 
 type Evaluator a = WriterT [Formula] (StateT Env IO) a
 
-pvcg :: VCGExpr -> Formula -> Evaluator VCGExpr
-pvcg ReadDeltaRPM q = return ReadDeltaRPM
+pvcg
+    :: VCGExpr ->
+       Formula ->
+       Evaluator VCGExpr
+pvcg ReadDeltaRPM q
+    = return ReadDeltaRPM
 
