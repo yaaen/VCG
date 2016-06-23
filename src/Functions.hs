@@ -55,7 +55,13 @@ deltaRPMSymbols_ (Tuple (ListSymbols a, ListSymbols b))
 
 exeMain_ =
     do
-    hunks <- readDeltaRPM_ >>= applyDeltaRPM_ >>= readRPMSymbols_ >>= deltaRPMSymbols_
-    putStrLn $ show hunks
-    return ()
+    readDeltaRPM_ >>=
+        \x -> applyDeltaRPM_ x >>=
+            \y -> readRPMSymbols_ y >>=
+                \z -> deltaRPMSymbols_ z >>=
+                    \h -> (putStrLn . show) h >> return h
+
+    --hunks <- readDeltaRPM_ >>= applyDeltaRPM_ >>= readRPMSymbols_ >>= deltaRPMSymbols_
+    --putStrLn $ show hunks
+    --return ()
 

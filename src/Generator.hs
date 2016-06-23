@@ -13,13 +13,13 @@
 --
 -----------------------------------------------------------------------------
 
-module Generator (
+module Generator (example) where
 
-) where
-
+import Prelude hiding (lookup)
 import Control.Monad.State
 import Control.Monad.Writer
 import Data.Map
+import Data.Maybe
 import Code
 import Functions
 
@@ -28,9 +28,9 @@ import Functions
 #endif
 
 infix  4 :<:, :<=:, :>:, :>=:, :=:, :/=:
-infixl 3 :/\:, :>>:
+infixl 3 :/\:
 infixl 2 :\/:
-infixr 1 :=>:
+infixr 1 :=>:, :>>:
 infix  0 :<=>:
 
 type Term = String
@@ -51,32 +51,63 @@ data Formula  = Formula :/\: Formula
               | Term :/=:  Term
 
 type Pre  = Map Term Formula
-type Env = Map Term Value
+
+type Var = String
+type Env = Map Var Value
 
 data VCGExpr = ReadDeltaRPM
-             | ApplyDeltaRPM
-             | ReadRPMSymbols
-             | DeltaRPMSymbols
+             | ApplyDeltaRPM Var
+             | ReadRPMSymbols Var
+             | DeltaRPMSymbols Var
+             | Assign Var VCGExpr
              | VCGExpr :>>: VCGExpr
+             deriving (Show)
+
 
 type VCG a = WriterT [Formula] (StateT Env IO) a
 runVCG :: Env -> [Formula] -> VCG a -> IO ((a, [Formula]), Env)
 runVCG env vcs g = runStateT (runWriterT g) env
 
-pvcg :: VCGExpr -> Formula -> VCG ()
-pvcg ReadDeltaRPM q
-    = do { Tuple (RPM a, RPM b) <- liftIO readDeltaRPM_ ; return () }
-pvcg ApplyDeltaRPM q
-    = liftIO $ applyDeltaRPM_  (Tuple (RPM "", RPM "")) >> return ()
-pvcg ReadRPMSymbols q
-    = do { Tuple (a, b) <- liftIO $ readRPMSymbols_ (Tuple (RPM "", RPM "")); return () }
-pvcg DeltaRPMSymbols q
+pvcg
+    :: VCGExpr ->
+       Formula ->
+       VCG ()
+pvcg (Assign var ReadDeltaRPM) _
     = do
-      Tuple (RPM a, RPM b) <- liftIO $ deltaRPMSymbols_ (Tuple (ListSymbols [], ListSymbols []))
-      return ()
+      env <- get
+      value <- liftIO readDeltaRPM_
+      put (insert var value env)
 
-example = let var = "x" :: Term
-              prog = ReadDeltaRPM :>>: ApplyDeltaRPM :>>: ReadRPMSymbols :>>: DeltaRPMSymbols
-              q = Forall var TRUE
-          in runVCG (singleton var (RPM DELTARPM)) [] (pvcg prog q)
+pvcg (Assign var (ApplyDeltaRPM arg)) _
+    = do
+      env <- get
+      value <- liftIO $ applyDeltaRPM_ (fromJust (lookup arg env))
+      put (insert var value env)
 
+pvcg (Assign var (ReadRPMSymbols arg)) _
+    = do
+      env <- get
+      value <- liftIO $ readRPMSymbols_ (fromJust (lookup arg env))
+      put (insert var value env)
+
+pvcg (Assign "h" (DeltaRPMSymbols "z")) _
+    = do
+      env <- get
+      value <- liftIO $ deltaRPMSymbols_ (fromJust (lookup "z" env))
+      put (insert "h" value env)
+
+pvcg (a :>>: b) q
+    = do
+      b' <- pvcg b q
+      a' <- pvcg a q
+      return a'
+
+example = do
+          let a = Assign "x" ReadDeltaRPM
+              b = Assign "y" (ApplyDeltaRPM "x")
+              c = Assign "z" (ReadRPMSymbols "y")
+              d = Assign "h" (DeltaRPMSymbols "z")
+              prog =  a :>>: (b :>>: (c :>>: d))
+              q = TRUE
+          post <- exeMain_
+          runVCG (singleton "d" post) [] (pvcg prog q)

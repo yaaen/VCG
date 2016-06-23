@@ -58,7 +58,7 @@ testMain = do
 -- MAIN_FUNCTION is preprocessor macro set to exeMain or testMain.
 -- That way we can use the same file for both an application and for tests.
 #ifndef MAIN_FUNCTION
-#define MAIN_FUNCTION  exeMain_
+#define MAIN_FUNCTION example --exeMain_
 #endif
 main = MAIN_FUNCTION
 
