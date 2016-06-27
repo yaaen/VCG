@@ -5,7 +5,7 @@ data Atom =
    State String
  | File String
  | Symbol String String
- deriving (Show)
+ deriving (Show, Eq)
 
 data Value =
    ListOperations [Atom]
@@ -15,7 +15,8 @@ data Value =
  | Assemble [Atom]
  | RPM String
  | Tuple (Value, Value)
- deriving (Show)
+ | Nil
+ deriving (Show, Eq)
 
 as_list :: Value -> [Atom]
 as_list value =
