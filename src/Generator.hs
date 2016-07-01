@@ -63,7 +63,7 @@ data Formula  = Formula :/\: Formula
               deriving (Show)
 
 type Pre  = Formula
-type Env  = Map String Value
+type Env  = Map String (Value)
 
 data VCGExpr = Fun UninterFun
              | Assign Var VCGExpr
@@ -109,53 +109,68 @@ pvcg (a :>>: b) q
       a' <- pvcg a q
       return a'
 
-type Eval a = (StateT (Env, [String]) IO) a
-runEnv :: Eval a -> (Env, [String])-> IO (a, (Env, [String]))
-runEnv = runStateT
+type Eval a = WriterT [String] (StateT Env IO) a
+runEnv :: Eval a->  Env ->  IO ((a, [String]), Env)
+runEnv eval env = runStateT (runWriterT eval) env
 
-eval :: Env -> Formula -> Eval Value
-eval env (Forall var f)                           = eval env f
-eval env (TRUE :/\: b)                            = eval env b
-eval env (a :/\: TRUE)                            = eval env a
-eval env (a :/\: b)                               = do
-                                                    val_a <- eval env a
-                                                    (env', unresolved) <- get
-                                                    if (length unresolved /= 0)
-                                                        then eval env' b >> eval env' a
-                                                        else eval env' b
-eval env (Var "x" :=: Val ReadDeltaRPM)           = do
-                                                    (env, unresolved) <- get
-                                                    output <- liftIO $ readDeltaRPM_
-                                                    put $ (insert "x" output env, unresolved)
-                                                    return output
-eval env (Var "h" :=: Val (DeltaRPMSymbols "z"))  = do
-                                                    (env, unresolved) <- get
-                                                    if not (member "z" env)
-                                                       then put (env, "z":unresolved) >> return Nil
-                                                       else do
-                                                            let input = fromJust (lookup "z" env)
-                                                            output <- liftIO $ deltaRPMSymbols_ input
-                                                            put (insert "h" output env, unresolved)
-                                                            return output
-eval env (Var "z" :=: Val (ReadRPMSymbols "y"))   = do
-                                                    (env, unresolved) <- get
-                                                    if not (member "y" env)
-                                                       then put (env, "y":unresolved) >> return Nil
-                                                       else do
-                                                            let input = fromJust (lookup "y" env)
-                                                            output <- liftIO $ readRPMSymbols_ input
-                                                            put (insert "z" output env, unresolved)
-                                                            return output
-
-eval env (Var "y" :=: Val (ApplyDeltaRPM "x"))    = do
-                                                    (env, unresolved) <- get
-                                                    if not (member "x" env)
-                                                       then put (env, "x":unresolved) >> return Nil
-                                                       else do
-                                                            let input = fromJust (lookup "x" env)
-                                                            output <- liftIO $ applyDeltaRPM_ input
-                                                            put (insert "y" output env, unresolved)
-                                                            return output
+eval :: [String] -> Formula -> Eval ([String])
+eval unresolved (Forall var f)
+    = do
+      (env, unresolved) <- get
+      let env' = insert var Empty env
+      put (env', unresolved)
+      eval env' f
+eval unresolved (TRUE :/\: b)
+    = do
+      (env', unresolved) <- get
+      eval env' b
+eval unresolved (a :/\: TRUE)
+    = do
+      (env', unresolved) <- get
+      eval env' a
+eval unresolved (a :/\: b)
+    = do
+      (env, _) <- get
+      val_a <- eval env a
+      (env', unresolved) <- get
+      if (length unresolved /= 0)
+         then eval env' b >> eval env' a
+         else eval env' b
+eval unresolved (Var "x" :=: Val ReadDeltaRPM)
+    = do
+      (env, unresolved) <- get
+      output <- liftIO $ readDeltaRPM_
+      let env' = adjust (\_ -> output) "x" env
+      put (env', unresolved)
+eval _ (Var "h" :=: Val (DeltaRPMSymbols "z"))
+    = do
+      (env, unresolved) <- get
+      if (lookup "z" env) == Just Empty
+         then do
+              put (env, "z":unresolved)
+         else do
+              let input = fromJust (lookup "z" env)
+              output <- liftIO $ deltaRPMSymbols_ input
+              let env' = adjust (\_ -> output) "h" env
+              put (env', unresolved)
+eval _ (Var "z" :=: Val (ReadRPMSymbols "y"))
+    = do
+      (env, unresolved) <- get
+      if (lookup "y" env) == Just Empty
+         then put (env, "y":unresolved)
+         else do
+              let input = fromJust (lookup "y" env)
+              output <- liftIO $ readRPMSymbols_ input
+              put (adjust (\_ -> output) "z" env, unresolved)
+eval _ (Var "y" :=: Val (ApplyDeltaRPM "x"))
+    = do
+      (env, unresolved) <- get
+      if (lookup "x" env) == Just Empty
+           then put (env, "x":unresolved)
+           else do
+                let input = fromJust (lookup "x" env)
+                output <- liftIO $ applyDeltaRPM_ input
+                put (adjust (\_ -> output) "y" env, unresolved)
 
 example = do
           let a = Assign "x" (Fun ReadDeltaRPM)
@@ -167,14 +182,15 @@ example = do
               q = TRUE
           post <- exeMain_
           ((expr, []), wp) <-runVCG pre (pvcg prog q)
-          (value, (env, unresolved)) <- runEnv (eval empty wp) (empty, [])
-          putStrLn ("value " ++ (show value))
+          putStrLn (show wp)
+          (_, (env, unresolved)) <- runEnv (eval empty wp) (empty, [])
           putStrLn ("unresolved " ++ (show unresolved))
           putStrLn ("x:= " ++ (show (lookup "x" env)))
           putStrLn ("y:= " ++ (show (lookup "y" env)))
           putStrLn ("z:= " ++ (show (lookup "z" env)))
           putStrLn ("h:= " ++ (show (lookup "h" env)))
-          return $ lookup "h" env
+          putStrLn $ show env
+          return $ fromJust $ lookup "h" env
 
 --Forall "h"
     --(Forall "z"
@@ -186,20 +202,16 @@ example = do
                     --Var "y" :=: Val (ApplyDeltaRPM "x")) :/\:
                     --Var "x" :=: Val ReadDeltaRPM))))
 
-prop_wp = unsafePerformIO example == Just (ListSymbols [Symbol "T" "asnintdecode_mobiledef",
-                                                        Symbol "T" "decode_additionaldata",
-                                                        Symbol "T" "decode_crashdef",
-                                                        Symbol "T" "decode_testresultdef",
-                                                        Symbol "T" "eCallIfaceFunc_encode_optionaldata",
-                                                        Symbol "T" "eCallIfaceFunc_init_additionaldata",
-                                                        Symbol "T" "eCallIfaceFunc_init_eraGlonass_data",
-                                                        Symbol "T" "encode_additionaldata",
-                                                        Symbol "T" "encode_crashdef",
-                                                        Symbol "T" "encode_mobiledef",
-                                                        Symbol "T" "encode_testresultdef",
-                                                        Symbol "D" "ID_ADDITIONALDATA",
-                                                        Symbol "T" "init_additionaldata",
-                                                        Symbol "T" "init_crashdef",
-                                                        Symbol "T" "init_mobiledef",
-                                                        Symbol "T" "init_testresultdef",
-                                                        Symbol "D" "OID_ADDITIONALDATA"])
+prop_wp = let a = unsafePerformIO example
+              b = unsafePerformIO exeMain_
+          in a == b
+
+
+
+
+
+
+
+
+
+

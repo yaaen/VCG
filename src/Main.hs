@@ -27,15 +27,6 @@ import Operations
 import Generator
 import Functions
 
-{-
--- Simple function to create a hello message.
-hello s = "Hello " ++ s
-
--- Tell QuickCheck that if you strip "Hello " from the start of
--- hello s you will be left with s (for any s).
-prop_hello s = stripPrefix "Hello " (hello s) == Just s
--}
-
 exeMainDebug =
     do
     (old, new) <- readDeltaRPM

@@ -15,7 +15,7 @@ data Value =
  | Assemble [Atom]
  | RPM String
  | Tuple (Value, Value)
- | Nil
+ | Empty
  deriving (Show, Eq)
 
 as_list :: Value -> [Atom]
