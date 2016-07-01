@@ -20,6 +20,7 @@ import Control.Monad.State
 import Control.Monad.Writer
 import Control.Applicative hiding (empty)
 import Data.Map
+import qualified Data.List as L
 import Data.Maybe
 import Code
 import Functions
@@ -40,6 +41,7 @@ data UninterFun = ReadDeltaRPM
                 | ApplyDeltaRPM Var
                 | ReadRPMSymbols Var
                 | DeltaRPMSymbols Var
+                | ComputeDelta Var
                 deriving (Show)
 
 data Term = Var String
@@ -62,6 +64,9 @@ data Formula  = Formula :/\: Formula
               | Term :=:   Term
               | Term :/=:  Term
               | TypedValue Term
+              | Evaluation Term Term Term
+              | TypedExpression Term Term
+              | Program Term
               deriving (Show)
 
 type Pre  = Formula
@@ -73,44 +78,41 @@ data VCGExpr = Fun UninterFun
              deriving (Show)
 
 
-type VCG a = WriterT [Formula] (StateT Pre IO) a
-runVCG :: Pre -> VCG a -> IO ((a, [Formula]), Pre)
-runVCG pre g = runStateT (runWriterT g) pre
+type VCG a = WriterT [(String, Formula)] (StateT Pre IO) a
+runVCG :: VCG a -> Pre ->  IO ((a, [(String, Formula)]), Pre)
+runVCG g pre = runStateT (runWriterT g) pre
 
 pvcg
     :: VCGExpr ->
-       Formula ->
        VCG ()
-pvcg (Assign "x" (Fun ReadDeltaRPM)) _
+pvcg (Assign "x" (Fun ReadDeltaRPM))
     = do
       liftIO $ putStrLn (show $ ReadDeltaRPM)
       (Forall "h" (Forall "z" (Forall "y" (Forall "x" assign)))) <- get
       put (Forall "h" (Forall "z" (Forall "y" (Forall "x" (assign :/\: (Var "x" :=: Val ReadDeltaRPM))))))
 
-pvcg (Assign "y" (Fun (ApplyDeltaRPM "x"))) _
+pvcg (Assign "y" (Fun (ApplyDeltaRPM "x")))
     = do
       liftIO $ putStrLn (show $ ApplyDeltaRPM "x")
       (Forall "h" (Forall "z" (Forall "y" assign))) <- get
       put (Forall "h" (Forall "z" (Forall "y" (Forall "x" (assign :/\: (Var "y" :=: Val (ApplyDeltaRPM "x")))))))
 
-pvcg (Assign "z" (Fun (ReadRPMSymbols "y"))) _
+pvcg (Assign "z" (Fun (ReadRPMSymbols "y")))
     = do
       liftIO $ putStrLn (show $ ReadRPMSymbols "y")
       (Forall "h" (Forall "z" assign)) <- get
       put (Forall "h" (Forall "z" (Forall "y" (assign :/\: (Var "z" :=: Val (ReadRPMSymbols "y"))))))
 
-pvcg (Assign "h" (Fun (DeltaRPMSymbols  "z"))) _
+pvcg (Assign "h" (Fun (DeltaRPMSymbols  "z")))
     = do
       liftIO $ putStrLn (show $ DeltaRPMSymbols "z")
       Forall "h" (Forall "z" (Forall "y" (Forall "x" pre))) <- get
-      tell [TypedValue (Var "h")]
       put (Forall "h" (Forall "z" (pre :/\: (Var "h" :=: Val (DeltaRPMSymbols "z")))))
+      tell [("evaluation", Evaluation (Var "z") (Val (ComputeDelta "h")) (Var "h"))]
+      tell [("typed_expression", TypedExpression (Var "z") (Val (ComputeDelta "h")))]
+      tell [("typed_value", TypedValue (Var "h"))]
 
-pvcg (a :>>: b) q
-    = do
-      b' <- pvcg b q
-      a' <- pvcg a q
-      return a'
+pvcg (a :>>: b) = pvcg b >> pvcg a
 
 type Eval a = WriterT [String] (StateT Env IO) a
 runEnv :: Eval a->  Env ->  IO ((a, [String]), Env)
@@ -160,12 +162,11 @@ example = do
               c = Assign "z" (Fun (ReadRPMSymbols "y"))
               d = Assign "h" (Fun (DeltaRPMSymbols "z"))
               prog =  a :>>: (b :>>: (c :>>: d))
-              pre = Forall "h" (Forall "z" (Forall "y" (Forall "x" TRUE)))
-              q = TRUE
-          post <- exeMain_
-          ((expr, vcgs), wp) <-runVCG pre (pvcg prog q)
+              post = Forall "h" (Forall "z" (Forall "y" (Forall "x" TRUE)))
+          post_ <- exeMain_
+          ((expr, vc:vcgs), wp) <-runVCG (pvcg prog) post
           putStrLn (show wp)
-          putStrLn (show vcgs)
+          putStrLn (show (L.foldl (\(a_,a) (b_,b) -> (a_ ++ " implies " ++ b_ , a :=>: b)) vc vcgs))
           (unresolved, env) <- runEnv (eval wp) (empty)
           --putStrLn ("unresolved " ++ (show unresolved))
           --putStrLn ("x:= " ++ (show (lookup "x" env)))
