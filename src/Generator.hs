@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP #-}{-# LANGUAGE ScopedTypeVariables #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Generator
@@ -18,6 +18,7 @@ module Generator (example, prop_wp) where
 import Prelude hiding (lookup)
 import Control.Monad.State
 import Control.Monad.Writer
+import Control.Applicative hiding (empty)
 import Data.Map
 import Data.Maybe
 import Code
@@ -60,6 +61,7 @@ data Formula  = Formula :/\: Formula
               | Term :>=:  Term
               | Term :=:   Term
               | Term :/=:  Term
+              | TypedValue Term
               deriving (Show)
 
 type Pre  = Formula
@@ -101,6 +103,7 @@ pvcg (Assign "h" (Fun (DeltaRPMSymbols  "z"))) _
     = do
       liftIO $ putStrLn (show $ DeltaRPMSymbols "z")
       Forall "h" (Forall "z" (Forall "y" (Forall "x" pre))) <- get
+      tell [TypedValue (Var "h")]
       put (Forall "h" (Forall "z" (pre :/\: (Var "h" :=: Val (DeltaRPMSymbols "z")))))
 
 pvcg (a :>>: b) q
@@ -113,64 +116,43 @@ type Eval a = WriterT [String] (StateT Env IO) a
 runEnv :: Eval a->  Env ->  IO ((a, [String]), Env)
 runEnv eval env = runStateT (runWriterT eval) env
 
-eval :: [String] -> Formula -> Eval ([String])
-eval unresolved (Forall var f)
-    = do
-      (env, unresolved) <- get
-      let env' = insert var Empty env
-      put (env', unresolved)
-      eval env' f
-eval unresolved (TRUE :/\: b)
-    = do
-      (env', unresolved) <- get
-      eval env' b
-eval unresolved (a :/\: TRUE)
-    = do
-      (env', unresolved) <- get
-      eval env' a
-eval unresolved (a :/\: b)
-    = do
-      (env, _) <- get
-      val_a <- eval env a
-      (env', unresolved) <- get
-      if (length unresolved /= 0)
-         then eval env' b >> eval env' a
-         else eval env' b
-eval unresolved (Var "x" :=: Val ReadDeltaRPM)
-    = do
-      (env, unresolved) <- get
-      output <- liftIO $ readDeltaRPM_
-      let env' = adjust (\_ -> output) "x" env
-      put (env', unresolved)
-eval _ (Var "h" :=: Val (DeltaRPMSymbols "z"))
-    = do
-      (env, unresolved) <- get
-      if (lookup "z" env) == Just Empty
-         then do
-              put (env, "z":unresolved)
-         else do
-              let input = fromJust (lookup "z" env)
-              output <- liftIO $ deltaRPMSymbols_ input
-              let env' = adjust (\_ -> output) "h" env
-              put (env', unresolved)
-eval _ (Var "z" :=: Val (ReadRPMSymbols "y"))
-    = do
-      (env, unresolved) <- get
-      if (lookup "y" env) == Just Empty
-         then put (env, "y":unresolved)
-         else do
-              let input = fromJust (lookup "y" env)
-              output <- liftIO $ readRPMSymbols_ input
-              put (adjust (\_ -> output) "z" env, unresolved)
-eval _ (Var "y" :=: Val (ApplyDeltaRPM "x"))
-    = do
-      (env, unresolved) <- get
-      if (lookup "x" env) == Just Empty
-           then put (env, "x":unresolved)
-           else do
-                let input = fromJust (lookup "x" env)
-                output <- liftIO $ applyDeltaRPM_ input
-                put (adjust (\_ -> output) "y" env, unresolved)
+eval :: Formula -> Eval ([String])
+eval (Forall var f)
+    = insert var Empty <$> get >>= \env' ->
+        put env' >>
+          eval f
+eval (TRUE :/\: b)  = eval b
+eval (a :/\: TRUE)  = eval a
+eval (a :/\: b)
+    = eval a >>= \unresolved ->
+        if (length unresolved /= 0)
+          then eval b >> eval a
+          else eval b
+eval (Var "x" :=: Val ReadDeltaRPM)
+    = (liftIO readDeltaRPM_) >>= \val ->
+        adjust (\Empty -> val) "x" <$> get >>= \env ->
+          put env >> return []
+eval (Var "h" :=: Val (DeltaRPMSymbols "z"))
+    = lookup "z" <$> get >>= \input ->
+        if input == Just Empty
+          then return ("z":[])
+          else (liftIO (deltaRPMSymbols_ (fromJust input))) >>= \val ->
+                 adjust (\Empty -> val) "h" <$> get >>= \env ->
+                   put env >> return []
+eval (Var "z" :=: Val (ReadRPMSymbols "y"))
+    = lookup "y" <$> get >>= \input ->
+        if input == Just Empty
+          then return ("y":[])
+          else (liftIO (readRPMSymbols_ (fromJust input))) >>= \val ->
+                 adjust (\Empty -> val) "z" <$> get >>= \env ->
+                   put env >> return []
+eval (Var "y" :=: Val (ApplyDeltaRPM "x"))
+    = lookup "x" <$> get >>= \input ->
+        if input == Just Empty
+          then return ("x":[])
+          else (liftIO (applyDeltaRPM_ (fromJust input))) >>= \val ->
+                 adjust (\Empty -> val) "y" <$> get >>= \env ->
+                   put env >> return []
 
 example = do
           let a = Assign "x" (Fun ReadDeltaRPM)
@@ -181,15 +163,16 @@ example = do
               pre = Forall "h" (Forall "z" (Forall "y" (Forall "x" TRUE)))
               q = TRUE
           post <- exeMain_
-          ((expr, []), wp) <-runVCG pre (pvcg prog q)
+          ((expr, vcgs), wp) <-runVCG pre (pvcg prog q)
           putStrLn (show wp)
-          (_, (env, unresolved)) <- runEnv (eval empty wp) (empty, [])
-          putStrLn ("unresolved " ++ (show unresolved))
-          putStrLn ("x:= " ++ (show (lookup "x" env)))
-          putStrLn ("y:= " ++ (show (lookup "y" env)))
-          putStrLn ("z:= " ++ (show (lookup "z" env)))
+          putStrLn (show vcgs)
+          (unresolved, env) <- runEnv (eval wp) (empty)
+          --putStrLn ("unresolved " ++ (show unresolved))
+          --putStrLn ("x:= " ++ (show (lookup "x" env)))
+          --putStrLn ("y:= " ++ (show (lookup "y" env)))
+          --putStrLn ("z:= " ++ (show (lookup "z" env)))
           putStrLn ("h:= " ++ (show (lookup "h" env)))
-          putStrLn $ show env
+          --putStrLn $ show env
           return $ fromJust $ lookup "h" env
 
 --Forall "h"
