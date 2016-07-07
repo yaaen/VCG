@@ -35,14 +35,35 @@ data Expr =
  | Rem_operation Expr
  | Delta [Expr]
  | Compile Expr
+ deriving (Eq)
 
-data DialectType =
-   Type_Base BaseType
- | Type_Delta BaseType
- | Type_Product BaseType
- | Type_Variant BaseType
-data BaseType =
-   Type_Statechart
- | Type_Metadata
- | Type_Object
+instance Show Expr where
+    show (Statechart_elem atom) = "statechart_elem( " ++ show atom  ++ " )"
+    show (Metadata_elem atom) = "metadata_elem( "  ++ show atom  ++ " )"
+    show (Object_elem atom) = "object_elem( " ++ show atom ++ " )"
+    show (Add_operation expr) = "add_operation( "  ++ show expr ++ " )"
+    show (Rem_operation expr) = "rem_operation( "  ++ show expr ++ " )"
+    show (Delta expr) = "delta( "  ++ show expr  ++ " )"
+    show (Compile expr) = "compile( "  ++ show expr  ++ " )"
+
+infixr 1 :==>:
+
+data Prop =
+   Prop :==>: Prop
+ | CoqTypedValue Value
+ | CoqEvaluation Value Expr Value
+ | CoqTypedExpression Value Expr
+ deriving (Eq)
+
+instance Show Prop where
+    show (a :==>: b)
+        = show a ++ " -> " ++ "\n" ++ show b
+    show (CoqTypedValue (ListSymbols symbols))
+        = "TypedValue (" ++ show symbols ++ ", Type_Base Type_Object)"
+    show (CoqEvaluation (ListSymbols core) (Compile program) (ListSymbols value))
+        = "Semantics" ++ "(" ++ show core ++ ", " ++ "compile( " ++ show program ++ "))"
+             ++ " " ++ "(Assemble (" ++ show value ++ "))"
+    show (CoqTypedExpression  (ListSymbols core) (Compile program))
+        = "TypedExpression (" ++ show core ++ ", " ++ "compile (" ++ show program ++ "), "
+             ++ " Type_Variant Type_Object)"
 
