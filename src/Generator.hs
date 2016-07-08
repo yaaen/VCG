@@ -19,6 +19,7 @@ import Prelude hiding (lookup)
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
+import Control.Monad.Except
 import Control.Applicative hiding (empty)
 import Data.Map
 import qualified Data.List as L
@@ -111,9 +112,9 @@ pvcg (Assign "h" (Fun (DeltaRPMSymbols  "z")))
       liftIO $ putStrLn (show $ DeltaRPMSymbols "z")
       Forall "h" (Forall "z" (Forall "y" (Forall "x" pre))) <- get
       put (Forall "h" (Forall "z" (pre :=>: (Var "h" :=: Val (DeltaRPMSymbols "z")))))
-      tell [Evaluation (Val DeltaCore) (Val (ComputeDelta "h")) (Var "h") :=>:
-            TypedExpression (Val DeltaCore) (Val (ComputeDelta "h")) :=>:
-            TypedValue (Var "h")]
+      tell [Forall "h" (Evaluation (Val DeltaCore) (Val (ComputeDelta "h")) (Var "h") :=>:
+                        TypedExpression (Val DeltaCore) (Val (ComputeDelta "h")) :=>:
+                        TypedValue (Var "h")) ]
 
 pvcg (a :>>: b) = pvcg b >> pvcg a
 
@@ -162,35 +163,31 @@ eval (Var "y" :=: Val (ApplyDeltaRPM "x"))
                    put env >> return []
 
 
-type EvalVC a = ReaderT Env (IO) a
-
-test = ((+) 4) 5
+type EvalVC a = ReaderT Env (ExceptT String IO) a
 
 evalVC :: Formula -> EvalVC Prop
 evalVC (a :=>: b) = liftM2 (:==>:) (evalVC a) (evalVC b)
+evalVC (Forall var p)
+    = lookup "h" <$> ask >>= \h ->
+        if isJust h then evalVC p else throwError "variable not quantified"
 evalVC (Evaluation (Val DeltaCore) (Val (ComputeDelta "h")) (Var "h"))
-    =
-
-      do
-      env <- ask
-      let ListSymbols symbols = fromJust $ lookup "h" env
-      return $ CoqEvaluation (ListSymbols [])
-                             (Compile (Delta (L.map (Add_operation . Object_elem) symbols)))
-                             (ListSymbols symbols)
+    = lookup "h" <$> ask >>= \h ->
+        let ListSymbols symbols = fromJust h
+        in return $ CoqEvaluation
+                        (ListSymbols [])
+                        (Compile (Delta (L.map (Add_operation . Object_elem) symbols)))
+                        (ListSymbols symbols)
 evalVC (TypedExpression (Val DeltaCore) (Val (ComputeDelta "h")))
-    = do
-      env <- ask
-      let ListSymbols symbols = fromJust $ lookup "h" env
-      return $ CoqTypedExpression (ListSymbols [])
-                                  (Compile (Delta (L.map (Add_operation . Object_elem) symbols)))
+    = lookup "h" <$> ask >>= \h ->
+        let ListSymbols symbols = fromJust h
+        in return $ CoqTypedExpression
+                        (ListSymbols [])
+                        (Compile (Delta (L.map (Add_operation . Object_elem) symbols)))
 evalVC (TypedValue (Var "h"))
-    = do
-      env <- ask
-      let ListSymbols symbols = fromJust $ lookup "h" env
-      return $ CoqTypedValue (ListSymbols symbols)
+    = lookup "h" <$> ask >>= \h -> return $ CoqTypedValue (fromJust h)
 
-runVC :: EvalVC a->  Env ->  IO a
-runVC eval env = runReaderT eval env
+runVC :: EvalVC a->  Env ->  IO (Either String a)
+runVC eval env = runExceptT (runReaderT eval env)
 
 example = do
           let a = Assign "x" (Fun ReadDeltaRPM)
