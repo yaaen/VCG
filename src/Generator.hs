@@ -38,15 +38,17 @@ infixl 2 :\/:
 infixr 1 :=>:, :>>:
 infix  0 :<=>:
 
+-- meta-functions
 type Var = String
 data UninterFun = ReadDeltaRPM
                 | ApplyDeltaRPM Var
                 | ReadRPMSymbols Var
                 | DeltaRPMSymbols Var
                 | ComputeDelta Var
-                | DeltaCore
+                | DeltaCore -- remove
                 deriving (Show)
 
+--not to be used (Var String)
 data Term = Var String
           | Val UninterFun
           | Coq Prop

@@ -26,7 +26,6 @@ import Path
 import Data.String.Utils
 import Data.Algorithm.Diff3
 import NMParser
-import Code
 
 #ifndef DELTA_RPM
 #define DELTARPM "ecall-delta-1.0-1.drpm"
@@ -56,7 +55,7 @@ applyDeltaRPM (old, new)
 
 readRPMSymbols
     :: (String, String) ->
-       IO ([(String,String)], [(String,String)])
+       IO ([(Char, String)], [(Char, String)])
 readRPMSymbols (old, new)
     = readSymTab old >>= \a ->
         readSymTab new >>= \b ->
@@ -64,7 +63,7 @@ readRPMSymbols (old, new)
 
 readSymTab
     :: String ->
-       IO [(String,String)]
+       IO [(Char,String)]
 readSymTab rpm
     = do
       let cmd1 = "cd data; rm -rf ./usr; rpm2cpio " ++ rpm ++ ".i686.rpm" ++ " | cpio --quiet -idmv"
@@ -79,8 +78,8 @@ readSymTab rpm
       fillout s = case s of { "" -> replicate 8 ' ' ; _ -> s }
 
 deltaRPMSymbols
-    :: ([(String,String)], [(String,String)]) ->
-       IO [Hunk (String, String)]
+    :: ([(Char, String)], [(Char, String)]) ->
+       IO [Hunk (Char, String)]
 deltaRPMSymbols (old, new)
     =  return
         $ filter (\hunk -> case hunk of { RightChange _ -> True; _ -> False } )

@@ -31,19 +31,19 @@ symbol_name = Parsec.many $
 
 test1 = parse symbol_name "b_@j_"
 
-rule1 :: Parsec.Parsec String () (String,String, String)
+rule1 :: Parsec.Parsec String () (String, Char, String)
 rule1 = do
         Parsec.spaces
-        sym_type <- Parsec.many1 Parsec.letter
+        sym_type:[] <- Parsec.count 1 Parsec.letter
         Parsec.spaces
         sym_name <- symbol_name
         return ("", sym_type, sym_name)
 
-rule2 :: Parsec.Parsec String () (String,String, String)
+rule2 :: Parsec.Parsec String () (String, Char, String)
 rule2 = do
         sym_value <- Parsec.count 8 Parsec.alphaNum
         Parsec.spaces
-        sym_type <- Parsec.many1 Parsec.letter
+        sym_type:[] <- Parsec.count 1 Parsec.letter
         Parsec.spaces
         sym_name <- symbol_name
         return (sym_value, sym_type, sym_name)

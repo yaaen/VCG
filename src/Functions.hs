@@ -17,7 +17,7 @@ module Functions (readDeltaRPM_, applyDeltaRPM_, readRPMSymbols_, deltaRPMSymbol
 import Data.Algorithm.Diff3
 import Control.Monad
 import Control.Applicative
-import Code
+import Extraction
 import Operations
 
 readDeltaRPM_  :: IO Value
