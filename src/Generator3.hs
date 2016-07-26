@@ -110,19 +110,19 @@ runVCG g pre = runStateT g pre
 dependency
     :: IValue ->
        String ->
-       Env ->
-       Env
-dependency (I val) var env
-    = let isArgOf value = case value of { I _ -> False; F var' _ -> var == var' }
-          getArg value  = case value of { I v -> Nothing; F var val -> Just var }
-          singleton = filter isArgOf env
-      in if size singleton == 1
-            then let Just var' = (map getArg env) ! var
-                     (v, F var f) = elemAt 0 singleton
-                     val' = I (val >>= f)
-                     env' = insert v val' env
-                 in dependency val' v env'
-            else env
+       VCG ()
+dependency (I val) var
+    = filter isArgOf <$> get >>= \singleton ->
+        if size singleton == 1
+          then do
+               let (v, F var f) = elemAt 0 singleton
+                   val' = I (val >>= f)
+               put =<< insert v val' <$> get
+               dependency val' v
+          else return ()
+      where
+        isArgOf value = case value of { I _ -> False; F var' _ -> var == var' }
+
 
 pvcg
     :: MetaExpr ->
@@ -131,35 +131,27 @@ pvcg
 pvcg (Assign "x" (Fun ReadDeltaRPM))
     = \pre -> do
               liftIO $ putStrLn (show $ ReadDeltaRPM)
-              env <- get
-              let env'  = insert "x" (I readDeltaRPM_) env
-                  env'' = dependency (I readDeltaRPM_) "x" env'
-              put env''
-              return pre
+              (put =<< insert "x" (I readDeltaRPM_) <$> get)
+                >> dependency (I readDeltaRPM_) "x"
+                >> return pre
 
 pvcg (Assign "y" (Fun (ApplyDeltaRPM "x")))
     = \pre -> do
               liftIO $ putStrLn (show $ ApplyDeltaRPM "x")
-              env <- get
-              let env'  = insert "y" (F "x" applyDeltaRPM_) env
-              put env'
-              return pre
+              (put =<< insert "y" (F "x" applyDeltaRPM_) <$> get)
+                >> return pre
 
 pvcg (Assign "z" (Fun (ReadRPMSymbols "y")))
     = \pre -> do
               liftIO $ putStrLn (show $ ReadRPMSymbols "y")
-              env <- get
-              let env'  = insert "z" (F "y" readRPMSymbols_) env
-              put env'
-              return pre
+              (put =<< insert "z" (F "y" readRPMSymbols_) <$> get)
+                >> return pre
 
 pvcg (Assign "h" (Fun (DeltaRPMSymbols  "z")))
     = \pre -> do
               liftIO $ putStrLn (show $ DeltaRPMSymbols "z")
-              env <- get
-              let env'  = insert "h" (F "z" deltaRPMSymbols_) env
-              put env'
-              return pre
+              (put =<< insert "h" (F "z" deltaRPMSymbols_) <$> get)
+                >> return pre
 
 pvcg (a :>>: b) = \pre -> pvcg b pre >>= pvcg a
 
