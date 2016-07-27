@@ -23,6 +23,7 @@ import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
 import Control.Monad.Except
+import Bifunctor
 import Control.Applicative hiding (empty)
 import Data.Map
 import qualified Data.List as L
@@ -108,20 +109,18 @@ runVCG :: VCG a -> Env ->  IO (a, Env)
 runVCG g pre = runStateT g pre
 
 dependency
-    :: IValue ->
-       String ->
+    :: (String, IValue) ->
        VCG ()
-dependency (I val) var
-    = filter isArgOf <$> get >>= \singleton ->
-        if size singleton == 1
-          then do
-               let (v, F var f) = elemAt 0 singleton
-                   val' = I (val >>= f)
-               put =<< insert v val' <$> get
-               dependency val' v
-          else return ()
+dependency (var, I val)
+    = filter somearg <$> get >>=
+        \case map | size map == 1 ->
+                       pure (bimap id (\(F var f) -> I (val >>= f)) (dep map)) >>=
+                            \kv -> (put =<< (uncurry insert) kv <$> get)
+                                 *> dependency kv
+                  | otherwise -> return ()
       where
-        isArgOf value = case value of { I _ -> False; F var' _ -> var == var' }
+        somearg value = case value of { I _ -> False; F var' _ -> var == var' }
+        dep map = (head (toList map))
 
 
 pvcg
@@ -132,8 +131,8 @@ pvcg (Assign "x" (Fun ReadDeltaRPM))
     = \pre -> do
               liftIO $ putStrLn (show $ ReadDeltaRPM)
               (put =<< insert "x" (I readDeltaRPM_) <$> get)
-                >> dependency (I readDeltaRPM_) "x"
-                >> return pre
+                *> dependency ("x", (I readDeltaRPM_))
+                *> pure pre
 
 pvcg (Assign "y" (Fun (ApplyDeltaRPM "x")))
     = \pre -> do
