@@ -14,7 +14,7 @@ executable VCG
     buildable: True
     extensions: FlexibleContexts
     hs-source-dirs: src
-    other-modules: Bifunctor Generator3
+    other-modules: Generator4 Bifunctor Generator3
  
 test-suite test-VCG
     build-depends: MissingH -any, QuickCheck -any, aeson -any,

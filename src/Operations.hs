@@ -68,7 +68,7 @@ readSymTab rpm
     = do
       let cmd1 = "cd data; rm -rf ./usr; rpm2cpio " ++ rpm ++ ".i686.rpm" ++ " | cpio --quiet -idmv"
       (ExitSuccess, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd1) ""
-      putStrLn ("stdout :" ++ stdout) >> putStrLn ("stderr :" ++ stderr)
+      --putStrLn ("stdout :" ++ stdout) >> putStrLn ("stderr :" ++ stderr)
       b <- (parseRelFile . rstrip) stderr
       let cmd2 = "cd data; nm " ++ fromRelFile b
       (ExitSuccess, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd2) ""

@@ -13,7 +13,9 @@
 -----------------------------------------------------------------------------
 
 module Extraction (
-    Atom(..), Value(..), as_list, Expr(..), DialectType (..)
+    Atom(..), CoqValue(..), as_list, Expr(..),
+    Semantics (..), TypedExpression (..), TypedValue (..), DialectType (..),
+    CoqProp (..), BaseType (..)
 ) where
 
 import Prelude
@@ -22,31 +24,19 @@ data Atom =
    State Prelude.Char
  | File Prelude.Char
  | Symbol Prelude.Char Prelude.String
- deriving (Show)
+    deriving (Show)
 
 type Undefined_symbol = ()
 
-{-data Value =
+data CoqValue =
    ListOperations ([] Atom)
  | ListFilenames ([] Atom)
  | ListSymbols ([] Atom)
- | Product Value Value
+ | Product CoqValue CoqValue
  | Assemble ([] Atom)
- deriving (Show)
--}
+    deriving (Show)
 
-data Value =
-   ListOperations [Atom]
- | ListFilenames [Atom]
- | ListSymbols [Atom]
- | Product Value Value
- | Assemble [Atom]
- | RPM String
- | Tuple (Value, Value)
- | Undefined
- deriving (Show)
-
-as_list :: Value -> [] Atom
+as_list :: CoqValue -> [] Atom
 as_list value =
   case value of {
    ListOperations l -> l;
@@ -63,48 +53,26 @@ data Expr =
  | Rem_operation Expr
  | Delta ([] Expr)
  | Compile Expr
- deriving (Show)
-
-{-data Semantics =
-   ADD_statechat Atom ([] Atom)
- | ADD_metadata Atom ([] Atom)
- | ADD_object Atom ([] Atom)
- | REMOVE_statechart Atom ([] Atom)
- | REMOVE_metadata Atom ([] Atom)
- | REMOVE_object Atom ([] Atom)
- | APPLY Value Expr ([] Expr) Value Value Semantics Semantics
- | COMPILE Value Expr Value Semantics
- deriving (Show)
--}
+     deriving (Show)
 
 data DialectType =
    Type_Base BaseType
  | Type_Delta BaseType
  | Type_Product BaseType
  | Type_Variant BaseType
- deriving (Show)
+     deriving (Show)
+
 data BaseType =
    Type_Statechart
  | Type_Metadata
  | Type_Object
- deriving (Show)
+     deriving (Show)
 
-{-data TypedValue =
-   TC_Statechart ([] Atom)
- | TC_Metadata ([] Atom)
- | TC_Symbols ([] Atom)
- | TC_Product Value Value BaseType TypedValue TypedValue
- | TC_Variant Value BaseType TypedValue
- deriving (Show)
+data Semantics = Semantics (CoqValue, Expr, CoqValue) deriving (Show)
+data TypedExpression = TypedExpression (CoqValue, Expr, DialectType) deriving (Show)
+data TypedValue = TypedValue (CoqValue, DialectType) deriving (Show)
 
-data TypedExpression =
-   TE_Statechart_Add Value Atom
- | TE_Statechart_Rem Value Atom
- | TE_Metadata_Add Value Atom
- | TE_Metadata_Rem Value Atom
- | TE_Symbols_Add Value Atom
- | TE_Symbols_Rem Value Atom
- | TE_Delta Value Expr ([] Expr) BaseType TypedExpression TypedExpression
- | TE_Compile Value Expr BaseType TypedExpression
- deriving (Show)
--}
+data CoqProp = CoqPTy TypedValue
+             | CoqPEx TypedExpression
+             | CoqPEv Semantics
+            deriving (Show)

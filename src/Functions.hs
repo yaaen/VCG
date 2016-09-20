@@ -12,13 +12,23 @@
 --
 -----------------------------------------------------------------------------
 
-module Functions (readDeltaRPM_, applyDeltaRPM_, readRPMSymbols_, deltaRPMSymbols_, exeMain_) where
+module Functions (readDeltaRPM_,
+                  applyDeltaRPM_,
+                  readRPMSymbols_,
+                  deltaRPMSymbols_,
+                  exeMain_,
+                  Value (..)) where
 
 import Data.Algorithm.Diff3
 import Control.Monad
 import Control.Applicative
 import Extraction
 import Operations
+
+data Value = C CoqValue
+           | RPM String
+           | Tuple (Value, Value)
+           deriving (Show)
 
 readDeltaRPM_  :: IO Value
 readDeltaRPM_  = Tuple <$> readDeltaRPM__
@@ -43,11 +53,11 @@ readRPMSymbols__ (Tuple (RPM a, RPM b))
     = liftM f (readRPMSymbols (a,b))
       where
       g = \(a,b) -> Symbol a b
-      f = \(ll, lr) -> (ListSymbols (map g ll), ListSymbols (map g lr))
+      f = \(ll, lr) -> (C (ListSymbols (map g ll)), C (ListSymbols (map g lr)))
 
 deltaRPMSymbols_ :: Value -> IO Value
-deltaRPMSymbols_ (Tuple (ListSymbols a, ListSymbols b))
-    = ListSymbols <$> liftM g (deltaRPMSymbols (map f a, map f b))
+deltaRPMSymbols_ (Tuple (C (ListSymbols a), C (ListSymbols b)))
+    = C <$> ListSymbols <$> liftM g (deltaRPMSymbols (map f a, map f b))
       where
       f = \(Symbol s n) -> (s,n)
       g = map (\(RightChange ((s,n):[])) -> Symbol s n)
