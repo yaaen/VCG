@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Generator4
@@ -32,6 +33,7 @@ import Data.Maybe
 import Functions
 import System.IO.Unsafe
 import Extraction
+import Text.PrettyPrint hiding (empty)
 
 #ifndef DELTA_RPM
 #define DELTARPM "ecall-delta-1.0-1.drpm"
@@ -80,7 +82,11 @@ data Formula  = Formula :/\: Formula
               | PEx Term Term
               | PEv Term Term Term
               | Coq CoqProp
-              deriving (Show)
+
+instance Show Formula where
+    show (a :=>: b)     = show a ++ show (" -> ") ++ "\n" ++ show b
+    show (Coq coqprop)  = show coqprop
+    show any            = "any"
 
 data IValue = I (IO Value) | F String (Value -> IO Value) deriving (Show)
 
@@ -200,19 +206,19 @@ eval (PEv (Val ProductCore) (Val (ComputeDelta "h")) (Var "h")) s
     = do
       C (ListSymbols syms) <- s ! "h"
       let core =  ListSymbols []
-          delta = Compile (Delta (L.map (\s -> Add_operation (Object_elem s)) syms))
-          value = Assemble syms
+          delta = Compile (Delta (L.map (\s -> Add_operation (Object_elem s)) (L.take 2 syms)))
+          value = Assemble (L.take 2 syms)
       pure (Coq (CoqPEv (Semantics (core, delta, value))))
 eval (PEx (Val ProductCore) (Val (ComputeDelta "h"))) s
     = do
       C (ListSymbols syms) <- s ! "h"
       let core =  ListSymbols []
-          delta = Compile (Delta (L.map (\s -> Add_operation (Object_elem s)) syms))
+          delta = Compile (Delta (L.map (\s -> Add_operation (Object_elem s)) (L.take 2 syms)))
       pure (Coq (CoqPEx (TypedExpression (core, delta, Type_Variant Type_Object))))
 eval (PTy (Var "h")) s
     = do
       C (ListSymbols syms) <- s ! "h"
-      pure (Coq (CoqPTy (TypedValue (Assemble syms, Type_Variant Type_Object))))
+      pure (Coq (CoqPTy (TypedValue (Assemble (L.take 2 syms), Type_Variant Type_Object))))
 
 example_ = do
            let a = Assign "x" (Fun ReadDeltaRPM)
@@ -224,7 +230,17 @@ example_ = do
            putStrLn (show ((st p) ! "h"))
            putStrLn (show (f p))
            f <- eval post (st p)
-           putStrLn (show f)
+
+           let header =  text "Add LoadPath \".\" as Top." $+$
+                         text "Require Import Top.Semantics." $+$
+                         text "Require Import String." $+$
+                         text "Require Import List." $+$
+                         text "Open Scope string_scope." $+$
+                         text "Lemma delta :"
+
+               vcFile = show (header $+$ text (show f))
+
+           putStrLn vcFile
 
 
 

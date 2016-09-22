@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Extraction
@@ -19,12 +20,15 @@ module Extraction (
 ) where
 
 import Prelude
+import Text.PrettyPrint
+import Generics.Deriving.Base (Generic)
+import Generics.Deriving.Show (GShow, gshow)
 
 data Atom =
    State Prelude.Char
  | File Prelude.Char
  | Symbol Prelude.Char Prelude.String
-    deriving (Show)
+    deriving (Show, Generic)
 
 type Undefined_symbol = ()
 
@@ -51,9 +55,21 @@ data Expr =
  | Object_elem Atom
  | Add_operation Expr
  | Rem_operation Expr
- | Delta ([] Expr)
+ | Delta [Expr]
  | Compile Expr
-     deriving (Show)
+    deriving (Generic)
+
+instance GShow Expr
+instance GShow Atom
+instance Show Expr where
+    show (Compile e)       =  render $ (text "Compile") <+> parens (text (show e))
+    show (Delta d)         =  render $ (text "Delta") <+>
+                                parens (foldl1 (<^>) (map (text .show) d) <^> (text "nil"))
+    show (Add_operation e) = render $ (text "Add_operation") <+> parens (text (show e))
+    show (Object_elem o)   = render $ (text "Object_elem") <+> parens (text (gshow o))
+    show expr              = render $ parens $ text $ gshow expr
+
+x <^> y = x <> text "::" <> y
 
 data DialectType =
    Type_Base BaseType
@@ -75,4 +91,9 @@ data TypedValue = TypedValue (CoqValue, DialectType) deriving (Show)
 data CoqProp = CoqPTy TypedValue
              | CoqPEx TypedExpression
              | CoqPEv Semantics
-            deriving (Show)
+
+instance Show CoqProp where
+    show (CoqPTy pty) = show pty
+    show (CoqPEx pex) = show pex
+    show (CoqPEv pev) = show pev
+

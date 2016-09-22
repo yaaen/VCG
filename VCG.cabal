@@ -4,12 +4,14 @@ cabal-version: >=1.2
 build-type: Simple
 license: AllRightsReserved
 license-file: ""
+description:  
 data-dir: ""
  
 executable VCG
     build-depends: MissingH -any, QuickCheck -any, aeson -any,
-                   base -any, containers -any, diff3 -any, mtl -any, parsec -any,
-                   path -any, process -any, pyfi -any, transformers -any
+                   base -any, containers -any, diff3 -any, generic-deriving -any,
+                   mtl -any, parsec -any, path -any, pretty -any, process -any,
+                   pyfi -any, transformers -any
     main-is: Main.hs
     buildable: True
     extensions: FlexibleContexts
@@ -18,8 +20,9 @@ executable VCG
  
 test-suite test-VCG
     build-depends: MissingH -any, QuickCheck -any, aeson -any,
-                   base -any, containers -any, diff3 -any, mtl -any, parsec -any,
-                   path -any, process -any, pyfi -any, transformers -any
+                   base -any, containers -any, diff3 -any, generic-deriving -any,
+                   mtl -any, parsec -any, path -any, pretty -any, process -any,
+                   pyfi -any, transformers -any
     type: exitcode-stdio-1.0
     main-is: Main.hs
     buildable: True
