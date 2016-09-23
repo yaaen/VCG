@@ -28,7 +28,14 @@ data Atom =
    State Prelude.Char
  | File Prelude.Char
  | Symbol Prelude.Char Prelude.String
-    deriving (Show, Generic)
+    deriving (Generic)
+
+instance Show Atom where
+    show (Symbol s str) = render $
+                            (text "Symbol") <+>
+                            (doubleQuotes (text [s])) <+>
+                            (doubleQuotes (text str))
+    show other          = gshow other
 
 type Undefined_symbol = ()
 
@@ -38,7 +45,16 @@ data CoqValue =
  | ListSymbols ([] Atom)
  | Product CoqValue CoqValue
  | Assemble ([] Atom)
-    deriving (Show)
+    deriving (Generic)
+
+instance GShow CoqValue
+instance Show CoqValue where
+  show (ListSymbols []) = render $ (text "ListSymbols") <+> text "nil"
+  show (ListSymbols ss) = render $ (text "ListSymbols") <+>
+                            parens (foldl1 (<^>) (map (text .show) ss) <^> (text "nil"))
+  show (Assemble ss)    = render $ (text "Assemble") <+>
+                            parens (foldl1 (<^>) (map (text .show) ss) <^> (text "nil"))
+  show other            = gshow other
 
 as_list :: CoqValue -> [] Atom
 as_list value =
@@ -66,7 +82,7 @@ instance Show Expr where
     show (Delta d)         =  render $ (text "Delta") <+>
                                 parens (foldl1 (<^>) (map (text .show) d) <^> (text "nil"))
     show (Add_operation e) = render $ (text "Add_operation") <+> parens (text (show e))
-    show (Object_elem o)   = render $ (text "Object_elem") <+> parens (text (gshow o))
+    show (Object_elem o)   = render $ (text "Object_elem") <+> parens (text (show o))
     show expr              = render $ parens $ text $ gshow expr
 
 x <^> y = x <> text "::" <> y
@@ -84,7 +100,12 @@ data BaseType =
  | Type_Object
      deriving (Show)
 
-data Semantics = Semantics (CoqValue, Expr, CoqValue) deriving (Show)
+data Semantics = Semantics (CoqValue, Expr, CoqValue)
+instance Show Semantics where
+    show (Semantics (c, e, v)) = render $
+                                 (text "Semantics") <+>  text (show (c,e)) <+>
+                                 parens (text (show v))
+
 data TypedExpression = TypedExpression (CoqValue, Expr, DialectType) deriving (Show)
 data TypedValue = TypedValue (CoqValue, DialectType) deriving (Show)
 

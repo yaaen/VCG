@@ -25,6 +25,8 @@ import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
 import Control.Monad.Except
+import System.Process
+import System.Exit
 import Bifunctor
 import Control.Applicative hiding (empty)
 import Data.Map
@@ -84,7 +86,7 @@ data Formula  = Formula :/\: Formula
               | Coq CoqProp
 
 instance Show Formula where
-    show (a :=>: b)     = show a ++ show (" -> ") ++ "\n" ++ show b
+    show (a :=>: b)     = show a ++ " -> " ++ "\n" ++ show b
     show (Coq coqprop)  = show coqprop
     show any            = "any"
 
@@ -231,16 +233,25 @@ example_ = do
            putStrLn (show (f p))
            f <- eval post (st p)
 
-           let header =  text "Add LoadPath \".\" as Top." $+$
-                         text "Require Import Top.Semantics." $+$
-                         text "Require Import String." $+$
-                         text "Require Import List." $+$
-                         text "Open Scope string_scope." $+$
-                         text "Lemma delta :"
+           let header = text "Add LoadPath \".\" as Top." $+$
+                        text "Require Import Top.Semantics." $+$
+                        text "Require Import String." $+$
+                        text "Require Import List." $+$
+                        text "Open Scope string_scope." $+$
+                        text "Lemma delta :"
+               footer = text "Proof." $+$
+                        text "  eauto using TypeLemma." $+$
+                        text "Qed."
 
-               vcFile = show (header $+$ text (show f))
+               vcString = show (header $+$ text (show f ++ ".")  $+$ footer)
 
-           putStrLn vcFile
+           writeFile "vc.v" vcString
+           vcString' <- readFile "vc.v"
+           putStrLn vcString'
+
+           let cmd = "\"coqc\"  -q  -R \".\" Top -I \".\"  vc.v"
+           (success, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd) ""
+           putStrLn $ show (success, stdout, stderr)
 
 
 
