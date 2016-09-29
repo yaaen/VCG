@@ -42,6 +42,24 @@ readDeltaRPM
             "return (d1,d2)"
       in f DELTARPM
 
+resolveUndefinedSym :: IO ()
+resolveUndefinedSym
+    = do
+      let cmd = "target=\"/usr/local/bin/ecalleu_i686\";" ++ "\n" ++
+                "for symbol in $(nm -D $target | grep \"U \" | cut -b12-);" ++ "\n" ++
+                "do for library in $(ldd $target | cut -d ' ' -f3- | cut -d' ' -f1);" ++ "\n" ++
+                "do if [ \"$library\" != \"not\" ]; then" ++ "\n" ++
+                "for lib_symbol in $(nm -D $library | grep \"T \" | cut -b12-);"  ++ "\n" ++
+                "do if [ $symbol == $lib_symbol ]; then echo \"$symbol \"Z\"  $library\"; fi ;" ++ "\n" ++
+                "done;" ++ "\n" ++
+                "else echo \"$symbol\"...no\"\";" ++ "\n" ++
+                "fi;" ++ "\n" ++
+                "done;" ++ "\n" ++
+                "done;"
+      (ExitSuccess, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd) ""
+      putStrLn stdout
+      return ()
+
 applyDeltaRPM
     :: (String, String) ->
        IO (String, String)
