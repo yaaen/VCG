@@ -196,6 +196,59 @@ wp (a :>>: b) = \p s ->
                 arg <- (\p' -> e1 p' s) p
                 ((\s' -> e2 p s') . st) arg
 
+
+newtype PreCondStore store a
+    = PreCondStore (store -> (store,a))
+
+instance Monad (PreCondStore store) where
+    return a = PreCondStore (\store -> (store,a))
+    PreCondStore run >>= action = PreCondStore run'
+        where run' st = let (st', a) = run st
+                            PreCondStore run'' = action a
+                        in run'' st'
+
+getStore :: PreCondStore store store
+getStore = PreCondStore (\store -> (store, store))
+
+putStore :: store -> PreCondStore store ()
+putStore new = PreCondStore (\_ -> (new,()))
+
+newtype PreCondStoreT store m a
+    = PreCondStoreT (store -> m (store, a))
+
+instance MonadTrans (PreCondStoreT store) where
+    lift m = PreCondStoreT (\s -> do a <- m
+                                     return (s,a))
+
+instance Monad m => Monad (PreCondStoreT store m) where
+    return a = PreCondStoreT (\store -> return (store,a))
+    PreCondStoreT m >>= k
+        = PreCondStoreT ( \s -> do
+                                (s', a) <- m s
+                                let PreCondStoreT m' = k a
+                                m' s' )
+    fail s = PreCondStoreT (\_ -> fail s)
+
+getT :: Monad m => PreCondStoreT s m s
+getT = PreCondStoreT (\s -> return (s, s))
+
+putT :: Monad m => s -> PreCondStoreT s m ()
+putT s = PreCondStoreT (\_ -> return (s, ()))
+
+evalPreCondStoreT :: Monad m => PreCondStoreT s m a -> s -> m a
+evalPreCondStoreT (PreCondStoreT m) store
+    = do
+      (s', a) <- m store
+      return a
+
+test ::  PreCondStoreT Int IO Int
+test = do
+       lift $ putStrLn "OLA"
+       return 0
+
+testEval = evalPreCondStoreT test 0
+
+
 post = Forall "h"
            (PEv (Val ProductCore) (Val (ComputeDelta "h")) (Var "h"))
                 :=>: (PEx (Val ProductCore) (Val (ComputeDelta "h")))
