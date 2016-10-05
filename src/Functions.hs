@@ -25,16 +25,16 @@ import Control.Applicative
 import Extraction
 import Operations
 
+
 data Value = C CoqValue
            | RPM String
            | Tuple (Value, Value)
            deriving (Show)
 
-readDeltaRPM_  :: IO Value
-readDeltaRPM_  = Tuple <$> readDeltaRPM__
 
-readDeltaRPM__ :: IO (Value, Value)
-readDeltaRPM__ = readDeltaRPM >>= \(a,b) -> return (RPM a, RPM b)
+readDeltaRPM_  :: IO Value
+readDeltaRPM_  = Tuple <$> (readDeltaRPM  >>= \(a,b) -> return (RPM a, RPM b))
+
 
 applyDeltaRPM_  :: Value -> IO Value
 applyDeltaRPM_ a = Tuple <$> applyDeltaRPM__ a
@@ -69,7 +69,8 @@ exeMain_ =
         \x -> applyDeltaRPM_ x >>=
             \y -> readRPMSymbols_ y >>=
                 \z -> deltaRPMSymbols_ z >>=
-                    \h -> (putStrLn . show) h >> return h
+                    \h -> -- (putStrLn . show) h >>
+                        return h
 
     --hunks <- readDeltaRPM_ >>= applyDeltaRPM_ >>= readRPMSymbols_ >>= deltaRPMSymbols_
     --putStrLn $ show hunks
