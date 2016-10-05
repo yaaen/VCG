@@ -193,8 +193,10 @@ wp (a :>>: b) = \p s ->
                 do
                 let e1  = \p' -> \s' -> wp a p' s'
                     e2  = \p' -> \s' -> wp b p' s'
-                arg <- (\p' -> e1 p' s) p
-                ((\s' -> e2 p s') . st) arg
+                p' <- e1 p s
+                p'' <- ((\s' -> e2 p s') . st) p'
+                pure (MkP (f p'') (st p''))
+
 
 
 newtype PreCondStore store a
