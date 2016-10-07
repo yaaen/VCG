@@ -49,8 +49,6 @@ data UninterFun = ReadDeltaRPM Var
                 | ApplyDeltaRPM Var
                 | ReadRPMSymbols Var
                 | DeltaRPMSymbols Var
-                | ComputeDelta Var
-                | ProductCore
                 deriving (Show)
 
 data MetaExpr = Fun UninterFun
@@ -86,7 +84,11 @@ subst_ty env "h"
 
 data IValue = I (IO Value) |
               F String (Value -> IO Value)
-            deriving (Show, Typeable)
+            deriving (Typeable)
+
+instance Show IValue where
+    showsPrec _ (I v) = (("I" ++ show v) ++)
+    showsPrec _ (F v f) = (("F " ++ v ++ " " ++ show f) ++)
 
 instance Show (IO Value) where
   show v = show $ unsafePerformIO v
@@ -94,10 +96,16 @@ instance Show (IO Value) where
 instance Show (Value -> IO Value) where
   show v = "function"
 
-type Env  = Map String (IValue)
-type VCG a = StateT Env (IO) a
-runVCG :: VCG a -> Env ->  IO (a, Env)
-runVCG g pre = runStateT g pre
+type MetaMap = Map String IValue
+metaFunctions::MetaMap = fromList [("x", I readDeltaRPM_),
+                                   ("y", F "x" applyDeltaRPM_),
+                                   ("z", F "y" readRPMSymbols_),
+                                   ("h", F "z" deltaRPMSymbols_)]
+
+type Env  = Map String IValue
+type VCG a = ReaderT MetaMap (StateT Env (IO)) a
+runVCG :: VCG a -> MetaMap -> Env ->  IO (a, Env)
+runVCG vcg meta env = runStateT (runReaderT vcg meta) env
 
 dependency
     :: (String, IValue) ->
@@ -107,12 +115,12 @@ dependency (var, F _ fun)
 dependency (var, I val)
     = filter somearg <$> get >>=
         \case map | size map == 1 ->
-                       pure (bimap id (\(F var f) -> I (val >>= f)) (dep map)) >>=
+                       pure (bimap id (\(F _ f) -> I (val >>= f)) (dep map)) >>=
                             \kv -> (put =<< (uncurry insert) kv <$> get)
                                  *> dependency kv
                   | otherwise -> return ()
       where
-        somearg value = case value of { I _ -> False; F var' _ -> var == var' }
+        somearg value = case value of { F var' _ -> var == var' ; _ -> False }
         dep map = (head (toList map))
 
 
@@ -120,14 +128,15 @@ pvcg
     :: MetaExpr ->
        (Env -> Formula) ->
        VCG Formula
-pvcg (Assign "x" (Fun (ReadDeltaRPM "_")))
+
+{-pvcg (Assign "x" (Fun (ReadDeltaRPM "_")))
     = \pre -> do
               liftIO $ putStrLn (show $ ReadDeltaRPM "_")
               let v = readDeltaRPM_
               let n = tyConName (typeRepTyCon (typeOf v))
               let m = if n == "->" then Just (I v) else Nothing
-              (put =<< insert "x" (I v) <$> get)
-                >> dependency ("x", I v)
+              (put =<< insert "x" (Just (I v)) <$> get)
+                >> dependency ("x", (Just (I v)))
                 >> pre <$> get
 
 pvcg (Assign "y" (Fun (ApplyDeltaRPM "x")))
@@ -136,23 +145,38 @@ pvcg (Assign "y" (Fun (ApplyDeltaRPM "x")))
               let f = applyDeltaRPM_
               let n = tyConName (typeRepTyCon (typeOf f))
               let v = if n == "->" then Just (F "x" f) else Nothing
-              (put =<< insert "y" (F "x" f) <$> get)
-                >> dependency ("y", (F "x" f))
+              (put =<< insert "y" v <$> get)
+                >> dependency ("y", v)
                 >> pre <$> get
 
 pvcg (Assign "z" (Fun (ReadRPMSymbols "y")))
     = \pre -> do
               liftIO $ putStrLn (show $ ReadRPMSymbols "y")
-              (put =<< insert "z" (F "y" readRPMSymbols_) <$> get)
-                >> dependency ("z", (F "y" readRPMSymbols_))
+              let f = readRPMSymbols_
+              let n = tyConName (typeRepTyCon (typeOf f))
+              let v = if n == "->" then Just (F "y" f) else Nothing
+              (put =<< insert "z" v <$> get)
+                >> dependency ("z", v)
                 >> pre <$> get
 
 pvcg (Assign "h" (Fun (DeltaRPMSymbols  "z")))
     = \pre -> do
               liftIO $ putStrLn (show $ DeltaRPMSymbols "z")
-              (put =<< insert "h" (F "z" deltaRPMSymbols_) <$> get)
-                >> dependency ("h", (F "z" deltaRPMSymbols_))
+              let f = deltaRPMSymbols_
+              let n = tyConName (typeRepTyCon (typeOf f))
+              let v = if n == "->" then Just (F "z" f) else Nothing
+              (put =<< insert "h" v <$> get)
+                >> dependency ("h", v)
                 >> pre <$> get
+-}
+pvcg (Assign var (Fun name))
+    = \pre -> do
+              f <- flip (!) var <$> ask
+              liftIO $ putStrLn (show f)
+              (put =<< insert var f <$> get)
+                >> dependency (var, f)
+                >> pre <$> get
+
 
 pvcg (a :>>: b) = \pre -> pvcg b pre >>= \pre' -> pvcg a (\env -> pre')
 
@@ -162,9 +186,7 @@ example = do
               c = Assign "z" (Fun (ReadRPMSymbols "y"))
               d = Assign "h" (Fun (DeltaRPMSymbols "z"))
               prog =  a :>>: (b :>>: (c :>>: d))
-          (wp, env) <-runVCG (pvcg prog post) (empty)
-          --putStrLn (show wp)
-          --mapM (putStrLn . show) ((keys env))
-          let I v = (env ! "h")
+          (wp, env) <-runVCG (pvcg prog post) metaFunctions empty
+          let v = (env ! "h")
           putStrLn (show v)
 
