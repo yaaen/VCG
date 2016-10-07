@@ -68,39 +68,80 @@ data Formula  = Formula :/\: Formula
               | Coq Prop
               deriving (Show)
 
-post = \env ->
-        Forall "h"
-           (Coq (CoqPEv (subst_ev env "h")))
-                :=>: (Coq (CoqPEx (subst_ex env "h")))
-                    :=>: (Coq (CoqPTy (subst_ty env "h")))
+preCondition
+    :: Env -> Formula
+preCondition env
+     = Forall "h"
+         (Coq (CoqPEv (subst_ev env "h")))
+            :=>: (Coq (CoqPEx (subst_ex env "h")))
+                :=>: (Coq (CoqPTy (subst_ty env "h")))
+
+resolve :: Formula -> Env -> IO Formula
+resolve f = \env ->
+               do
+               putStrLn "====================\n RESOLVE WP \n===================="
+               return $
+                 Forall "h"
+                    (Coq (CoqPEv (subst_ev env "h")))
+                         :=>: (Coq (CoqPEx (subst_ex env "h")))
+                             :=>: (Coq (CoqPTy (subst_ty env "h")))
 
 subst_ev env "h"
-    =  Semantics (ListSymbols [], Delta [], ListSymbols [])
+    = let syms = if member "h" env
+                    then case env ! "h" of
+                            I (C (ListSymbols syms)) -> syms
+                            F _ _ -> []
+                    else []
+          delta = Delta (L.map (\s -> Add_operation (Object_elem s)) (L.take 2 syms))
+          value = Assemble (L.take 2 syms)
+      in Semantics (delta, value)
 subst_ex env "h"
     =  TypedExpression (ListSymbols [], Delta [], Type_Delta Type_Object)
 subst_ty env "h"
     =  TypedValue (ListSymbols [], Type_Delta Type_Object)
 
+{-
+eval :: Formula -> Store -> IO Formula
+eval (Forall _ f) s = eval f s
+eval (a :=>: b) s = liftM2 ( (:=>:) ) (eval a s) (eval b s)
+eval (PEv (Val ProductCore) (Val (ComputeDelta "h")) (Var "h")) s
+    = do
+      C (ListSymbols syms) <- s ! "h"
+      let core =  ListSymbols []
+          delta = Compile (Delta (L.map (\s -> Add_operation (Object_elem s)) (L.take 2 syms)))
+          value = Assemble (L.take 2 syms)
+      pure (Coq (CoqPEv (Semantics (core, delta, value))))
+eval (PEx (Val ProductCore) (Val (ComputeDelta "h"))) s
+    = do
+      C (ListSymbols syms) <- s ! "h"
+      let core =  ListSymbols []
+          delta = Compile (Delta (L.map (\s -> Add_operation (Object_elem s)) (L.take 2 syms)))
+      pure (Coq (CoqPEx (TypedExpression (core, delta, Type_Variant Type_Object))))
+eval (PTy (Var "h")) s
+    = do
+      C (ListSymbols syms) <- s ! "h"
+      pure (Coq (CoqPTy (TypedValue (Assemble (L.take 2 syms), Type_Variant Type_Object))))
+-}
 
-data IValue = I (IO Value) |
-              F String (Value -> IO Value)
+data IValue = I (Value) |
+              F String (Value -> Value)
             deriving (Typeable)
 
 instance Show IValue where
-    showsPrec _ (I v) = (("I" ++ show v) ++)
+    showsPrec _ (I v) = (("I" ++ " " ++ show v) ++)
     showsPrec _ (F v f) = (("F " ++ v ++ " " ++ show f) ++)
 
-instance Show (IO Value) where
-  show v = show $ unsafePerformIO v
+--instance Show (IO Value) where
+--  show v = show $ unsafePerformIO v
 
-instance Show (Value -> IO Value) where
+instance Show (Value -> Value) where
   show v = "function"
 
 type MetaMap = Map String IValue
-metaFunctions::MetaMap = fromList [("x", I readDeltaRPM_),
-                                   ("y", F "x" applyDeltaRPM_),
-                                   ("z", F "y" readRPMSymbols_),
-                                   ("h", F "z" deltaRPMSymbols_)]
+metaFunctions::MetaMap = fromList [("x", I _readDeltaRPM_),
+                                   ("y", F "x" _applyDeltaRPM_),
+                                   ("z", F "y" _readRPMSymbols_),
+                                   ("h", F "z" _deltaRPMSymbols_)]
 
 type Env  = Map String IValue
 type VCG a = ReaderT MetaMap (StateT Env (IO)) a
@@ -115,7 +156,7 @@ dependency (var, F _ fun)
 dependency (var, I val)
     = filter somearg <$> get >>=
         \case map | size map == 1 ->
-                       pure (bimap id (\(F _ f) -> I (val >>= f)) (dep map)) >>=
+                       pure (bimap id (\(F _ f) -> I (f val)) (dep map)) >>=
                             \kv -> (put =<< (uncurry insert) kv <$> get)
                                  *> dependency kv
                   | otherwise -> return ()
@@ -126,7 +167,7 @@ dependency (var, I val)
 
 pvcg
     :: MetaExpr ->
-       (Env -> Formula) ->
+       (Env -> IO Formula) ->
        VCG Formula
 
 {-pvcg (Assign "x" (Fun (ReadDeltaRPM "_")))
@@ -172,13 +213,22 @@ pvcg (Assign "h" (Fun (DeltaRPMSymbols  "z")))
 pvcg (Assign var (Fun name))
     = \pre -> do
               f <- flip (!) var <$> ask
-              liftIO $ putStrLn (show f)
               (put =<< insert var f <$> get)
                 >> dependency (var, f)
-                >> pre <$> get
+                >> do
+                   env <- get
+                   liftIO $ putStrLn (show f)
+                   liftIO $ putStrLn (show env)
+                >> do
+                   env <- get
+                   liftIO $ pre env
+                   --pre <$> get
 
 
-pvcg (a :>>: b) = \pre -> pvcg b pre >>= \pre' -> pvcg a (\env -> pre')
+pvcg (a :>>: b)
+    = \pre -> pvcg b pre >>=
+        \f -> do
+                 pvcg a (\env -> resolve f env)
 
 example = do
           let a = Assign "x" (Fun (ReadDeltaRPM "_"))
@@ -186,7 +236,9 @@ example = do
               c = Assign "z" (Fun (ReadRPMSymbols "y"))
               d = Assign "h" (Fun (DeltaRPMSymbols "z"))
               prog =  a :>>: (b :>>: (c :>>: d))
-          (wp, env) <-runVCG (pvcg prog post) metaFunctions empty
+          (wp, env) <-runVCG (pvcg prog (resolve (preCondition empty))) metaFunctions empty
           let v = (env ! "h")
-          putStrLn (show v)
+          --putStrLn (show v)
+          putStrLn (show wp)
+
 
