@@ -11,7 +11,7 @@
 -- |
 --
 -----------------------------------------------------------------------------
-
+{-# LANGUAGE DeriveDataTypeable #-}
 module Functions (readDeltaRPM_,
                   applyDeltaRPM_,
                   readRPMSymbols_,
@@ -22,6 +22,7 @@ module Functions (readDeltaRPM_,
 import Data.Algorithm.Diff3
 import Control.Monad
 import Control.Applicative
+import Data.Typeable
 import Extraction
 import Operations
 
@@ -29,7 +30,7 @@ import Operations
 data Value = C CoqValue
            | RPM String
            | Tuple (Value, Value)
-           deriving (Show)
+           deriving (Show, Typeable)
 
 
 readDeltaRPM_  :: IO Value

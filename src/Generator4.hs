@@ -198,6 +198,27 @@ wp (a :>>: b) = \p s ->
                 pure (MkP (f p'') (st p''))
 
 
+expr_eval_ ::
+    MetaExpr ->
+    Store ->
+    PreCondStoreT Store IO Store
+expr_eval_ (Assign "x" (Fun ReadDeltaRPM)) s
+    =  return $ insert "x" readDeltaRPM_ s
+
+pred_eval_ ::
+    MetaExpr ->
+    Formula ->
+    Formula
+pred_eval_ (Assign "x" (Fun ReadDeltaRPM))
+    =  \p -> p
+
+wp_ :: MetaExpr -> Formula -> PreCondStoreT Store IO Formula
+
+wp_ (Assign "x" (Fun ReadDeltaRPM))
+    =  \p -> return p
+
+wp_ (a :>>: b)
+    = \p -> getT >>= expr_eval_ a >>= expr_eval_ b >>= putT >> ($) wp_ b p >>= wp_ a
 
 newtype PreCondStore store a
     = PreCondStore (store -> (store,a))
@@ -209,11 +230,26 @@ instance Monad (PreCondStore store) where
                             PreCondStore run'' = action a
                         in run'' st'
 
+instance  Functor (PreCondStore store) where
+   fmap f x = x >>= (pure . f)
+
+instance Applicative (PreCondStore store) where
+    pure   = return
+    m *> k = m >>= \ _ -> k
+    (<*>)  = ap
+
 getStore :: PreCondStore store store
 getStore = PreCondStore (\store -> (store, store))
 
 putStore :: store -> PreCondStore store ()
 putStore new = PreCondStore (\_ -> (new,()))
+
+{-wp__ :: MetaExpr -> Formula -> PreCondStore Store Formula
+
+wp__ (a :>>: b) = \p -> do
+                        expr_eval_ b <$> expr_eval_ a <$> getStore >>= putStore
+                        pred_eval_ a <$> pure (pred_eval_ b p)
+-}
 
 newtype PreCondStoreT store m a
     = PreCondStoreT (store -> m (store, a))
@@ -230,6 +266,16 @@ instance Monad m => Monad (PreCondStoreT store m) where
                                 let PreCondStoreT m' = k a
                                 m' s' )
     fail s = PreCondStoreT (\_ -> fail s)
+
+instance  (Monad m) => Functor (PreCondStoreT store m) where
+   fmap f x = do
+              x >>= (pure . f)
+
+instance (Monad m) => Applicative (PreCondStoreT store m) where
+    pure   = return
+    m *> k = m >>= \ _ -> k
+    (<*>)  = ap
+
 
 getT :: Monad m => PreCondStoreT s m s
 getT = PreCondStoreT (\s -> return (s, s))

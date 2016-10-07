@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Generator3
@@ -26,6 +27,7 @@ import Control.Monad.Except
 import Bifunctor
 import Control.Applicative hiding (empty)
 import Data.Map
+import Data.Typeable
 import qualified Data.List as L
 import Data.Maybe
 import Functions
@@ -36,7 +38,6 @@ import Extraction
 #define DELTARPM "ecall-delta-1.0-1.drpm"
 #endif
 
-infix  4 :<:, :<=:, :>:, :>=:, :=:, :/=:
 infixl 3 :/\:
 infixl 2 :\/:
 infixr 1 :=>:, :>>:
@@ -44,7 +45,7 @@ infix  0 :<=>:
 
 -- meta-functions
 type Var = String
-data UninterFun = ReadDeltaRPM
+data UninterFun = ReadDeltaRPM Var
                 | ApplyDeltaRPM Var
                 | ReadRPMSymbols Var
                 | DeltaRPMSymbols Var
@@ -57,9 +58,6 @@ data MetaExpr = Fun UninterFun
               | MetaExpr :>>: MetaExpr
               deriving (Show)
 
-data Term = Var String | Val UninterFun
-          deriving (Show)
-
 data Formula  = Formula :/\: Formula
               | Formula :\/: Formula
               | Formula :=>: Formula
@@ -69,39 +67,32 @@ data Formula  = Formula :/\: Formula
               | Forall String Formula
               | TRUE
               | FALSE
-              | Term :<:   Term
-              | Term :>:   Term
-              | Term :<=:  Term
-              | Term :>=:  Term
-              | Term :=:   Term
-              | Term :/=:  Term
-              | PTy Term
-              | PEx Term Term
-              | PEv Term Term Term
+              | Coq Prop
               deriving (Show)
 
-post = Forall "h"
-           (PEv (Val ProductCore) (Val (ComputeDelta "h")) (Var "h"))
-                :=>: (PEx (Val ProductCore) (Val (ComputeDelta "h")))
-                    :=>: (PTy (Var "h"))
+post = \env ->
+        Forall "h"
+           (Coq (CoqPEv (subst_ev env "h")))
+                :=>: (Coq (CoqPEx (subst_ex env "h")))
+                    :=>: (Coq (CoqPTy (subst_ty env "h")))
 
-{-
-data MetaValue = CoqTerm Value
-               | RPM String
-               | Tuple (MetaValue, MetaValue)
-               | Undefined
-               deriving (Show)
--}
+subst_ev env "h"
+    =  Semantics (ListSymbols [], Delta [], ListSymbols [])
+subst_ex env "h"
+    =  TypedExpression (ListSymbols [], Delta [], Type_Delta Type_Object)
+subst_ty env "h"
+    =  TypedValue (ListSymbols [], Type_Delta Type_Object)
 
-data IValue = I (IO Value) | F String (Value -> IO Value) deriving (Show)
+
+data IValue = I (IO Value) |
+              F String (Value -> IO Value)
+            deriving (Show, Typeable)
 
 instance Show (IO Value) where
   show v = show $ unsafePerformIO v
 
 instance Show (Value -> IO Value) where
   show v = "function"
-
-def = I (return Undefined)
 
 type Env  = Map String (IValue)
 type VCG a = StateT Env (IO) a
@@ -111,6 +102,8 @@ runVCG g pre = runStateT g pre
 dependency
     :: (String, IValue) ->
        VCG ()
+dependency (var, F _ fun)
+    = return ()
 dependency (var, I val)
     = filter somearg <$> get >>=
         \case map | size map == 1 ->
@@ -125,42 +118,53 @@ dependency (var, I val)
 
 pvcg
     :: MetaExpr ->
-       Formula ->
+       (Env -> Formula) ->
        VCG Formula
-pvcg (Assign "x" (Fun ReadDeltaRPM))
+pvcg (Assign "x" (Fun (ReadDeltaRPM "_")))
     = \pre -> do
-              liftIO $ putStrLn (show $ ReadDeltaRPM)
-              (put =<< insert "x" (I readDeltaRPM_) <$> get)
-                *> dependency ("x", (I readDeltaRPM_))
-                *> pure pre
+              liftIO $ putStrLn (show $ ReadDeltaRPM "_")
+              let v = readDeltaRPM_
+              let n = tyConName (typeRepTyCon (typeOf v))
+              let m = if n == "->" then Just (I v) else Nothing
+              (put =<< insert "x" (I v) <$> get)
+                >> dependency ("x", I v)
+                >> pre <$> get
 
 pvcg (Assign "y" (Fun (ApplyDeltaRPM "x")))
     = \pre -> do
               liftIO $ putStrLn (show $ ApplyDeltaRPM "x")
-              (put =<< insert "y" (F "x" applyDeltaRPM_) <$> get)
-                >> return pre
+              let f = applyDeltaRPM_
+              let n = tyConName (typeRepTyCon (typeOf f))
+              let v = if n == "->" then Just (F "x" f) else Nothing
+              (put =<< insert "y" (F "x" f) <$> get)
+                >> dependency ("y", (F "x" f))
+                >> pre <$> get
 
 pvcg (Assign "z" (Fun (ReadRPMSymbols "y")))
     = \pre -> do
               liftIO $ putStrLn (show $ ReadRPMSymbols "y")
               (put =<< insert "z" (F "y" readRPMSymbols_) <$> get)
-                >> return pre
+                >> dependency ("z", (F "y" readRPMSymbols_))
+                >> pre <$> get
 
 pvcg (Assign "h" (Fun (DeltaRPMSymbols  "z")))
     = \pre -> do
               liftIO $ putStrLn (show $ DeltaRPMSymbols "z")
               (put =<< insert "h" (F "z" deltaRPMSymbols_) <$> get)
-                >> return pre
+                >> dependency ("h", (F "z" deltaRPMSymbols_))
+                >> pre <$> get
 
-pvcg (a :>>: b) = \pre -> pvcg b pre >>= pvcg a
+pvcg (a :>>: b) = \pre -> pvcg b pre >>= \pre' -> pvcg a (\env -> pre')
 
 example = do
-          let a = Assign "x" (Fun ReadDeltaRPM)
+          let a = Assign "x" (Fun (ReadDeltaRPM "_"))
               b = Assign "y" (Fun (ApplyDeltaRPM "x"))
               c = Assign "z" (Fun (ReadRPMSymbols "y"))
               d = Assign "h" (Fun (DeltaRPMSymbols "z"))
               prog =  a :>>: (b :>>: (c :>>: d))
           (wp, env) <-runVCG (pvcg prog post) (empty)
-          putStrLn (show wp)
-          mapM (putStrLn . show) (toList env)
+          --putStrLn (show wp)
+          --mapM (putStrLn . show) ((keys env))
+          let I v = (env ! "h")
+          putStrLn (show v)
 

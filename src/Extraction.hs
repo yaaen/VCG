@@ -16,7 +16,7 @@
 module Extraction (
     Atom(..), CoqValue(..), as_list, Expr(..),
     Semantics (..), TypedExpression (..), TypedValue (..), DialectType (..),
-    CoqProp (..), BaseType (..)
+    Prop (..), BaseType (..)
 ) where
 
 import Prelude
@@ -79,6 +79,7 @@ instance GShow Expr
 instance GShow Atom
 instance Show Expr where
     show (Compile e)       =  render $ (text "Compile") <+> parens (text (show e))
+    show (Delta [])        =  render $ (text "Delta") <+> (text "nil")
     show (Delta d)         =  render $ (text "Delta") <+>
                                 parens (foldl1 (<^>) (map (text .show) d) <^> (text "nil"))
     show (Add_operation e) = render $ (text "Add_operation") <+> parens (text (show e))
@@ -109,11 +110,11 @@ instance Show Semantics where
 data TypedExpression = TypedExpression (CoqValue, Expr, DialectType) deriving (Show)
 data TypedValue = TypedValue (CoqValue, DialectType) deriving (Show)
 
-data CoqProp = CoqPTy TypedValue
-             | CoqPEx TypedExpression
-             | CoqPEv Semantics
+data Prop = CoqPTy TypedValue
+          | CoqPEx TypedExpression
+          | CoqPEv Semantics
 
-instance Show CoqProp where
+instance Show Prop where
     show (CoqPTy pty) = show pty
     show (CoqPEx pex) = show pex
     show (CoqPEv pev) = show pev

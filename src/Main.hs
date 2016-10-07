@@ -24,7 +24,7 @@ import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
 import Data.Algorithm.Diff3
 import Operations
-import Generator4
+import Generator3
 import Functions
 import Extraction
 

@@ -69,9 +69,6 @@ resolveUndefinedSym binary
                 "done;"
       (ExitSuccess, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd) ""
       let ls = lines stdout
-      putStrLn "Undefined: ========="
-      mapM putStrLn ls
-      putStrLn "===================="
       return ls
 
 applyDeltaRPM
@@ -113,16 +110,15 @@ readSymTab rpm new
          then return $ map (\(a,b,c) -> (b,c)) symbols
          else do
               undefined_ <- resolveUndefinedSym (fromRelFile b)
-              return $ map (\(a,b,c) -> if (elem [b] undefined_ && b=='U' && new)
-                                           then ('u',c)
-                                           else if (not (elem [b] undefined_) && b=='U' && new)
-                                                then ('T',c)
-                                                else (b,c)) symbols
+              mapM (\(a,b,c) -> do
+                                if (not (elem c undefined_) && b=='U' && new)
+                                   then do
+                                        putStr (if new then "new rpm" else "old rpm") >>
+                                            putStrLn (" => found " ++ show (b,c))
+                                        return ('T', c)
+                                   else return (b, c)) symbols
       where
       fillout s = case s of { "" -> replicate 8 ' ' ; _ -> s }
-
-
-
 
 deltaRPMSymbols
     :: ([(Char, String)], [(Char, String)]) ->

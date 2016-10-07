@@ -16,8 +16,8 @@ executable VCG
     buildable: True
     extensions: FlexibleContexts
     hs-source-dirs: src
-    other-modules: Generator NMParser Main Code Generator3 Operations
-                   Functions Generator4 Extraction Bifunctor
+    other-modules: NMParser Operations Code Functions Extraction Main
+                   Generator4 Generator Generator5 Bifunctor Generator3
  
 test-suite test-VCG
     build-depends: MissingH -any, QuickCheck -any, TypeCompose -any,
