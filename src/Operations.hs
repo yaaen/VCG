@@ -113,8 +113,8 @@ readSymTab rpm new
               mapM (\(a,b,c) -> do
                                 if (not (elem c undefined_) && b=='U' && new)
                                    then do
-                                        putStr (if new then "new rpm" else "old rpm") >>
-                                            putStrLn (" => found " ++ show (b,c))
+                                        --putStr (if new then "new rpm" else "old rpm") >>
+                                            --putStrLn (" => found " ++ show (b,c))
                                         return ('T', c)
                                    else return (b, c)) symbols
       where
