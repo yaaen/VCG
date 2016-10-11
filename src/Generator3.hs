@@ -186,46 +186,6 @@ pvcg
        Formula ->
        VCG Formula
 
-{-pvcg (Assign "x" (Fun (ReadDeltaRPM "_")))
-    = \pre -> do
-              liftIO $ putStrLn (show $ ReadDeltaRPM "_")
-              let v = readDeltaRPM_
-              let n = tyConName (typeRepTyCon (typeOf v))
-              let m = if n == "->" then Just (I v) else Nothing
-              (put =<< insert "x" (Just (I v)) <$> get)
-                >> dependency ("x", (Just (I v)))
-                >> pre <$> get
-
-pvcg (Assign "y" (Fun (ApplyDeltaRPM "x")))
-    = \pre -> do
-              liftIO $ putStrLn (show $ ApplyDeltaRPM "x")
-              let f = applyDeltaRPM_
-              let n = tyConName (typeRepTyCon (typeOf f))
-              let v = if n == "->" then Just (F "x" f) else Nothing
-              (put =<< insert "y" v <$> get)
-                >> dependency ("y", v)
-                >> pre <$> get
-
-pvcg (Assign "z" (Fun (ReadRPMSymbols "y")))
-    = \pre -> do
-              liftIO $ putStrLn (show $ ReadRPMSymbols "y")
-              let f = readRPMSymbols_
-              let n = tyConName (typeRepTyCon (typeOf f))
-              let v = if n == "->" then Just (F "y" f) else Nothing
-              (put =<< insert "z" v <$> get)
-                >> dependency ("z", v)
-                >> pre <$> get
-
-pvcg (Assign "h" (Fun (DeltaRPMSymbols  "z")))
-    = \pre -> do
-              liftIO $ putStrLn (show $ DeltaRPMSymbols "z")
-              let f = deltaRPMSymbols_
-              let n = tyConName (typeRepTyCon (typeOf f))
-              let v = if n == "->" then Just (F "z" f) else Nothing
-              (put =<< insert "h" v <$> get)
-                >> dependency ("h", v)
-                >> pre <$> get
--}
 pvcg (Assign var (Fun name))
     = \p     -> do
                 fun <- flip (!) var <$> ask
@@ -266,9 +226,6 @@ example = do
               d = Assign "h" (Fun (DeltaRPMSymbols "z"))
               prog =  a :>>: (b :>>: (c :>>: d))
           (wp, env) <-runVCG (pvcg prog pre) metaFunctions empty
-          --let v = (env ! "h")
-          --putStrLn (show v)
-          --putStrLn (show wp)
 
           let source = render $
                        header $+$

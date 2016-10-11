@@ -35,8 +35,12 @@ import qualified Data.Text.IO as Text
 #define DELTARPM "ecall-delta-1.0-1.drpm"
 #endif
 
-#ifndef SAFETY_LEVEL
-#define SAFETYLEVEL "shared"
+#define SAFETYLEVEL
+
+#ifdef SAFETYLEVEL
+#define LEVEL 2
+#else
+#define LEVEL 1
 #endif
 
 
@@ -106,9 +110,10 @@ readSymTab rpm new
       (_, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd2) ""
       --putStrLn ("nm :=  stdout :" ++ stdout) >> putStrLn ("stderr :" ++ stderr)
       let Right symbols = parse nmParser stdout
-      if (SAFETYLEVEL /= "shared")
+      if (LEVEL == 1)
          then return $ map (\(a,b,c) -> (b,c)) symbols
          else do
+              when new (putStrLn $ "Safety Level: " ++ (show LEVEL))
               undefined_ <- resolveUndefinedSym (fromRelFile b)
               mapM (\(a,b,c) -> do
                                 if (not (elem c undefined_) && b=='U' && new)
