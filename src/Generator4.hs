@@ -323,6 +323,26 @@ eval (PTy (Var "h")) s
       C (ListSymbols syms) <- s ! "h"
       pure (Coq (CoqPTy (TypedValue (Assemble (L.take 2 syms), Type_Variant Type_Object))))
 
+header = text "Add LoadPath \".\" as Top." $+$
+         text "Require Import Top.Semantics2." $+$
+         text "Require Import List."
+
+tactic = text "Ltac my_tauto :=" $+$
+         nest 2 (text "repeat match goal with") $+$
+         nest 12 (text "| [ H : _ = _  |- False ] => discriminate H") $+$
+         nest 12 (text "| [ H : In _ _ |- False ] => apply in_inv in H; intuition") $+$
+         nest 9 (text "end.")
+
+lemma  = text "Lemma delta :"
+
+proof = text "Proof." $+$
+        nest 2 (text "intros H1 H2.") $+$
+        nest 2 (text "assert (DefinedSymbols (symbols (Type_Delta Type_Object ("t"::nil))))") $+$
+        nest 4 (text "by (unfold symbols; constructor; apply not_in_cons; intuition; my_tauto).") $+$
+        nest 2 (text "eauto using TypeLemma.") $+$
+        text "Qed."
+
+
 example_ = do
            let a = Assign "x" (Fun ReadDeltaRPM)
                b = Assign "y" (Fun (ApplyDeltaRPM "x"))
@@ -334,17 +354,7 @@ example_ = do
            putStrLn (show (f p))
            f <- eval post (st p)
 
-           let header = text "Add LoadPath \".\" as Top." $+$
-                        text "Require Import Top.Semantics." $+$
-                        text "Require Import String." $+$
-                        text "Require Import List." $+$
-                        text "Open Scope string_scope." $+$
-                        text "Lemma delta :"
-               footer = text "Proof." $+$
-                        text "  eauto using TypeLemma." $+$
-                        text "Qed."
-
-               vcString = show (header $+$ text (show f ++ ".")  $+$ footer)
+           let vcString = show (header $+$ tactic $+$ lemma $+$ text (show f ++ ".")  $+$ footer)
 
            writeFile "vc.v" vcString
            vcString' <- readFile "vc.v"

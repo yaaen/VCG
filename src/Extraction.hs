@@ -124,7 +124,7 @@ instance Show Semantics where
                                  (text "Semantics") <+>  parens (text (show e)) <+>
                                      parens (text (show v))
 
-data TypedExpression = TypedExpression (CoqValue, Expr, DialectType) deriving (Show, Generic)
+data TypedExpression = TypedExpression (Expr, DialectType) deriving (Show, Generic)
 data TypedValue = TypedValue (CoqValue, DialectType) deriving (Show, Generic)
 
 {-data Prop = CoqPTy TypedValue

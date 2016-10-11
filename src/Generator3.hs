@@ -37,6 +37,8 @@ import System.IO.Unsafe
 import Extraction
 import Generics.Deriving.Base (Generic)
 import Generics.Deriving.Show (GShow, gshow)
+import Text.PrettyPrint hiding (empty)
+import System.Process
 
 #ifndef DELTA_RPM
 #define DELTARPM "ecall-delta-1.0-1.drpm"
@@ -69,9 +71,9 @@ data Formula  = Formula :/\: Formula
               | Forall String Formula
               | TRUE
               | FALSE
-              | PEv String
-              | PEx String
-              | PTy String
+              | PEv Var
+              | PEx Var
+              | PTy Var
               | CoqPTy TypedValue
               | CoqPEx TypedExpression
               | CoqPEv Semantics
@@ -120,52 +122,33 @@ compute_ (PEx "h") val
           core =  ListSymbols []
           delta = Delta (L.map (\s -> Add_operation (Object_elem s) (Delta [])) (L.take 2 syms))
           abst = L.map (\(Symbol s _) -> Flag s) (L.take 2 syms)
-      pure (CoqPEx (TypedExpression (core, delta, Type_Delta Type_Object abst)))
+      pure (CoqPEx (TypedExpression (delta, Type_Delta Type_Object abst)))
 compute_ (PTy "h") val
     = do
-      liftIO $ putStrLn $ "====================\n COMPUTE WP Ty" ++
-                show val  ++ " \n===================="
-      return (PTy "h")
-compute_ f val
-    = do
-      liftIO $ putStrLn $ "====================\n COMPUTE WP Ty" ++
-                show f  ++ " \n===================="
-      return f
-
-
-{-
-eval :: Formula -> Store -> IO Formula
-eval (Forall _ f) s = eval f s
-eval (a :=>: b) s = liftM2 ( (:=>:) ) (eval a s) (eval b s)
-eval (PEv (Val ProductCore) (Val (ComputeDelta "h")) (Var "h")) s
-    = do
-      C (ListSymbols syms) <- s ! "h"
-      let core =  ListSymbols []
-          delta = Compile (Delta (L.map (\s -> Add_operation (Object_elem s)) (L.take 2 syms)))
+      let ListSymbols syms = val
+          core =  ListSymbols []
           value = Assemble (L.take 2 syms)
-      pure (Coq (CoqPEv (Semantics (core, delta, value))))
-eval (PEx (Val ProductCore) (Val (ComputeDelta "h"))) s
-    = do
-      C (ListSymbols syms) <- s ! "h"
-      let core =  ListSymbols []
-          delta = Compile (Delta (L.map (\s -> Add_operation (Object_elem s)) (L.take 2 syms)))
-      pure (Coq (CoqPEx (TypedExpression (core, delta, Type_Variant Type_Object))))
-eval (PTy (Var "h")) s
-    = do
-      C (ListSymbols syms) <- s ! "h"
-      pure (Coq (CoqPTy (TypedValue (Assemble (L.take 2 syms), Type_Variant Type_Object))))
--}
+          abst = L.map (\(Symbol s _) -> Flag s) (L.take 2 syms)
+      pure (CoqPTy (TypedValue (value, Type_Delta Type_Object abst)))
+
+assertion :: Formula -> Env -> Doc
+assertion f env
+    = case env ! "h" of
+        I (C v) -> let ListSymbols syms = v
+                       abst = L.map (\(Symbol s _) -> Flag s) (L.take 2 syms)
+                       value = text $ show $ Type_Delta Type_Object abst
+                   in parens $
+                        text ("DefinedSymbols") <+>
+                        parens (text ("symbols") <+> parens (value))
+        F _ _   -> text ""
 
 data IValue = I (Value) |
               F String (Value -> Value)
             deriving (Typeable)
 
-instance Show IValue where
+{-instance Show IValue where
     showsPrec _ (I v) = (("I" ++ " " ++ show v) ++)
-    showsPrec _ (F v f) = (("F " ++ v ++ " " ++ show f) ++)
-
---instance Show (IO Value) where
---  show v = show $ unsafePerformIO v
+    showsPrec _ (F v f) = (("F " ++ v ++ " " ++ show f) ++) -}
 
 instance Show (Value -> Value) where
   show v = "function"
@@ -248,18 +231,33 @@ pvcg (Assign var (Fun name))
                 fun <- flip (!) var <$> ask
                 (put =<< insert var fun <$> get)
                   >> dependency (var, fun)
-                  >> do
-                     env <- get
-                     liftIO $ putStrLn (show fun)
-                     liftIO $ putStrLn (show env)
-                  >> do
-                     compute p =<< get
-                     --pre <$> get
+                  >> get >>= compute p
 
 
 pvcg (a :>>: b)
-   -- = \p -> pvcg b p >>= \p' -> pvcg a p'
-    = \p -> pvcg a =<< pvcg b p
+   = \p -> pvcg a =<< pvcg b p
+
+header = text "Add LoadPath \".\" as Top." $+$
+         text "Require Import Top.Semantics2." $+$
+         text "Require Import List."
+
+tactic = text "Ltac my_tauto :=" $+$
+         nest 2 (text "repeat match goal with") $+$
+         nest 12 (text "| [ H : _ = _  |- False ] => discriminate H") $+$
+         nest 12 (text "| [ H : In _ _ |- False ] => apply in_inv in H; intuition") $+$
+         nest 9 (text "end.")
+
+lemma l = text "Lemma delta :" $+$
+          text (show l) Text.PrettyPrint.<>
+          text "."
+
+proof value
+        = text "Proof." $+$
+          nest 2 (text "intros H1 H2.") $+$
+          nest 2 ((text "assert") <+> value) $+$
+          nest 4 (text "by (unfold symbols; constructor; apply not_in_cons; intuition; my_tauto).") $+$
+          nest 2 (text "eauto using TypeLemma.") $+$
+          text "Qed."
 
 example = do
           let a = Assign "x" (Fun (ReadDeltaRPM "_"))
@@ -268,8 +266,22 @@ example = do
               d = Assign "h" (Fun (DeltaRPMSymbols "z"))
               prog =  a :>>: (b :>>: (c :>>: d))
           (wp, env) <-runVCG (pvcg prog pre) metaFunctions empty
-          let v = (env ! "h")
+          --let v = (env ! "h")
           --putStrLn (show v)
-          putStrLn (show wp)
+          --putStrLn (show wp)
+
+          let source = render $
+                       header $+$
+                       tactic $+$
+                       lemma wp $+$
+                       proof (assertion wp env)
+
+          writeFile "vc.v" source
+          vcString' <- readFile "vc.v"
+          putStrLn vcString'
+
+          let cmd = "\"coqc\"  -q  -R \".\" Top -I \".\"  vc.v"
+          (success, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd) ""
+          putStrLn $ show (success, stdout, stderr)
 
 
