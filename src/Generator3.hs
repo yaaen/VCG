@@ -41,10 +41,6 @@ import Text.PrettyPrint hiding (empty)
 import System.Process
 import System.Exit
 
-#ifndef DELTA_RPM
-#define DELTARPM "ecall-delta-1.0-1.drpm"
-#endif
-
 infixl 3 :/\:
 infixl 2 :\/:
 infixr 1 :=>:, :>>:

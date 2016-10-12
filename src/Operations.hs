@@ -31,11 +31,12 @@ import NMParser
 import qualified Data.Text    as Text
 import qualified Data.Text.IO as Text
 
-#ifndef DELTA_RPM
+#ifndef DONT_DEFINE_DELTA
 #define DELTARPM "ecall-delta-1.0-1.drpm"
+#define DELTADIR "./data/"
 #endif
 
-#ifdef SAFETYLEVEL
+#ifdef SAFETY_LEVEL
 #define LEVEL 2
 #else
 #define LEVEL 1
@@ -45,13 +46,18 @@ import qualified Data.Text.IO as Text
 readDeltaRPM
     :: IO (String,String)
 readDeltaRPM
-    = let f = defVV $
+    = do
+      putStrLn $ show DELTARPM
+      let f = defVV $
             "def export(x): from deltarpm import readDeltaRPM;" ++
-            "d = readDeltaRPM ('./data/' + x);" ++
+            "d = readDeltaRPM ('" ++ DELTADIR ++ "' + x);" ++
+            -- "d = readDeltaRPM (x);" ++
             "d1 = d['old_nevr'];" ++
             "d2 = d['nevr'];" ++
             "return (d1,d2)"
-      in f DELTARPM
+      v <- f DELTARPM
+      putStrLn $ show v
+      return v
 
 resolveUndefinedSym
     :: String ->
@@ -78,9 +84,10 @@ applyDeltaRPM
        IO (String, String)
 applyDeltaRPM (old, new)
     = do
-      let cmd = "cd data; " ++
+      let cmd = "cd " ++ DELTADIR ++ "; " ++
                     "applydeltarpm -r " ++ old ++ ".i686.rpm" ++ " " ++
                         DELTARPM ++ " " ++ new ++ ".i686.rpm"
+      putStrLn cmd
       (ExitSuccess, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd) ""
       return (old, new)
 
