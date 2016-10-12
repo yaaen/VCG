@@ -35,8 +35,6 @@ import qualified Data.Text.IO as Text
 #define DELTARPM "ecall-delta-1.0-1.drpm"
 #endif
 
-#define SAFETYLEVEL
-
 #ifdef SAFETYLEVEL
 #define LEVEL 2
 #else
