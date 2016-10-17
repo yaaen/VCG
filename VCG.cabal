@@ -10,20 +10,22 @@ data-dir: ""
 executable VCG
     build-depends: MissingH -any, QuickCheck -any, TypeCompose -any,
                    aeson -any, base -any, containers -any, diff3 -any,
-                   generic-deriving -any, mtl -any, parsec -any, path -any,
-                   pretty -any, process -any, pyfi -any, text -any, transformers -any
+                   either-unwrap -any, generic-deriving -any, mtl -any, parsec -any,
+                   path -any, pretty -any, process -any, pyfi -any, text -any,
+                   transformers -any
     main-is: Main.hs
     buildable: True
     extensions: FlexibleContexts
     hs-source-dirs: src
-    other-modules: NMParser Operations Code Functions Extraction Main
-                   Generator4 Generator Generator5 Bifunctor Generator3
+    other-modules: Generator Generator5 NMParser Main Code Generator3
+                   Operations Functions Generator4 Extraction Bifunctor
  
 test-suite test-VCG
     build-depends: MissingH -any, QuickCheck -any, TypeCompose -any,
                    aeson -any, base -any, containers -any, diff3 -any,
-                   generic-deriving -any, mtl -any, parsec -any, path -any,
-                   pretty -any, process -any, pyfi -any, text -any, transformers -any
+                   either-unwrap -any, generic-deriving -any, mtl -any, parsec -any,
+                   path -any, pretty -any, process -any, pyfi -any, text -any,
+                   transformers -any
     type: exitcode-stdio-1.0
     main-is: Main.hs
     buildable: True

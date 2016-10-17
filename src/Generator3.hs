@@ -216,6 +216,12 @@ proof value
           nest 2 (text "eauto using TypeLemma.") $+$
           text "Qed."
 
+
+#ifndef DONT_DEFINE_DELTA
+#define DELTARPM "ecall-delta-1.0-1.drpm"
+#define DELTADIR "./data/"
+#endif
+
 example = do
           let a = Assign "x" (Fun (ReadDeltaRPM "_"))
               b = Assign "y" (Fun (ApplyDeltaRPM "x"))
@@ -230,14 +236,16 @@ example = do
                        lemma wp $+$
                        proof (assertion wp env)
 
-          writeFile "vc.v" source
+          writeFile (DELTADIR ++ "usr/local/lib/pcc/vc.v") source
           vcString' <- readFile "vc.v"
           putStrLn vcString'
 
-          let cmd = "\"coqc\"  -q  -R \".\" Top -I \".\"  vc.v"
+          let cmd = "cd " ++ DELTADIR ++ "; cd usr/local/lib/pcc;" ++
+                    "\"coqc\"  -q  -R \".\" Top -I \".\"  vc.v"
           (success, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd) ""
+          putStrLn $ show (cmd)
           putStrLn $ show (success)
           case success of
             ExitSuccess -> exitSuccess
-            ExitFailure c -> exitFailure
+            ExitFailure c -> putStrLn stderr >> exitFailure
 
