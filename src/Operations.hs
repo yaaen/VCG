@@ -102,19 +102,27 @@ applyDeltaRPM (old, new)
 #endif
 
 checkRPMInstalled
-    :: String ->
+    :: String -> String ->
        IO (Maybe String)
-checkRPMInstalled old
+checkRPMInstalled old new
     = do
       (exit, stdout, stderr) <- readCreateProcessWithExitCode (shell ("rpm -q " ++ old)) ""
+      putStrLn (stdout)
       assert (exit == ExitSuccess) (return ())
       let cmd = "rpm -ql " ++ old
       (exit, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd) ""
-      case exit of
+      path  <- case exit of
         ExitSuccess   ->  putStrLn (cmd ++ " $ ") >>
                                -- mapM_ (putStrLn) (filter (isInfixOf "bin") (lines stdout)) >>
-                                    return (Just (head (filter (isInfixOf "bin") (lines stdout))))
+                               return (Just (head (filter (isInfixOf "bin") (lines stdout))))
         ExitFailure _ -> return Nothing
+
+      let cmd = "cd " ++ DELTADIR ++ "; " ++
+                    "applydeltarpm " ++ DELTARPM ++ " " ++ new ++ ".i686.rpm"
+      putStrLn (cmd ++ " $ ")
+      (ExitSuccess, stdout, stderr) <- readCreateProcessWithExitCode (shell cmd) ""
+
+      return path
 
 readInstalledSymTab
     :: Maybe String ->
@@ -133,7 +141,7 @@ readRPMSymbols
 readRPMSymbols (old, new)
     =
 #ifdef SYSTEM
-      checkRPMInstalled old >>= \path ->
+      checkRPMInstalled old new >>= \path ->
             readInstalledSymTab path >>= \a ->
                      readSymTab new True >>= \b ->
                           return (a,b)
